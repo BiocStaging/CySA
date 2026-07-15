@@ -200,22 +200,23 @@ plotSOMScatter <- function(x, chs, metaSlot = "SOM_codes", pointSize = "n",
     xy <- sprintf("%s", chs)
     if (!zeros) df <- df[Matrix::rowSums(df[, chs[c(1, 2)]] == 0) == 0, ]
 
-    # Build aesthetic mapping using aes_string for proper evaluation
-    aes_list <- aes_string(
-        x = xy[1],
-        y = xy[2],
-        size = pointSize,
-        label = "id",
-        customdata = "id"
+    # Build aesthetic mapping with tidy evaluation.
+    aes_args <- list(
+        x = as.name(xy[1]),
+        y = as.name(xy[2]),
+        label = as.name("id"),
+        customdata = as.name("id")
     )
-
-    # Only add colour and fill if we have valid variables
+    if (pointSize %in% colnames(df)) {
+        aes_args$size <- as.name(pointSize)
+    }
     if (!is.null(col_var) && col_var %in% colnames(df)) {
-        aes_list$colour <- as.name(col_var)
+        aes_args$colour <- as.name(col_var)
     }
     if (!is.null(fill_var) && fill_var %in% colnames(df)) {
-        aes_list$fill <- as.name(fill_var)
+        aes_args$fill <- as.name(fill_var)
     }
+    aes_list <- do.call(aes, aes_args)
 
     # Create plot
     p1 <- ggplot(df, aes_list) + geom

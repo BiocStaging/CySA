@@ -1,6 +1,9 @@
 ---
 title: "Introduction to CySA"
-output: rmarkdown::html_vignette
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
 vignette: >
   %\VignetteIndexEntry{Introduction to CySA}
   %\VignetteEngine{knitr::rmarkdown}
@@ -169,6 +172,32 @@ plotSOMScatter(sce, chs = c("marker1", "marker2"))
 ```{r scatter-bj}
 plotScatterBJ(sce, chs = c("marker1", "marker2"))
 ```
+
+# Related cytometry workflows
+
+CySA is designed to sit between unsupervised clustering and downstream
+interpretation of cytometry experiments. It complements several established
+Bioconductor workflows:
+
+* **FlowSOM** — CySA consumes FlowSOM's SOM codes and optionally a FlowSOM
+  object to visualise and refine the SOM clustering interactively.
+* **CATALYST** — the expected input is a
+  `SingleCellExperiment` with `sample_id` and `cluster_id` in `colData`, a
+  convention used throughout CATALYST. Marker names and cluster codes are read
+  directly from the object.
+* **diffcyt / edgeR / limma** — after clusters have been selected and named in
+  CySA, the resulting `outputList` can be used to define cell populations for
+  differential abundance testing with packages such as
+  [diffcyt](https://bioconductor.org/packages/diffcyt),
+  [edgeR](https://bioconductor.org/packages/edgeR), or
+  [limma](https://bioconductor.org/packages/limma).
+* **SingleCellSignalR / scDiffCom** — once populations are fixed, the same
+  sample-level metadata can be reused for cell-cell communication or
+  trajectory-oriented analyses.
+
+The interactive step performed by CySA is therefore not a replacement for these
+workflows but a bridge: it lets a human curate SOM-derived clusters and then
+export clean population definitions for statistical downstream analysis.
 
 # Session information
 

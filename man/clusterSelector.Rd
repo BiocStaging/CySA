@@ -17,7 +17,9 @@ clusterSelector(
   nPlots = 6,
   somRasterData,
   somRasterObj,
-  env = environment()
+  fsom = NULL,
+  env = environment(),
+  verbose = FALSE
 )
 }
 \arguments{
@@ -45,9 +47,15 @@ performance-sensitive plots.}
 
 \item{somRasterData}{Data frame for SOM raster visualization.}
 
-\item{somRasterObj}{Raster object for SOM visualization.}
+\item{somRasterObj}{Raster object for SOM visualization. If \code{NULL},
+the SOM grid dimensions are inferred from \code{somRasterData}.}
+
+\item{fsom}{Optional \code{FlowSOM} object. If provided, an interactive
+FlowSOM star plot is shown.}
 
 \item{env}{Environment used to store mutable state (legacy argument).}
+
+\item{verbose}{Logical indicating whether to show detailed runtime messages.}
 }
 \value{
 A \code{\link[shiny]{shinyApp}} object. Launch the app with

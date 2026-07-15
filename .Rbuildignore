@@ -25,3 +25,4 @@
 ^CySA\.BiocCheck$
 ^CySA_.*\.tar\.gz$
 ^.Rhistory$
+^Julia.*$

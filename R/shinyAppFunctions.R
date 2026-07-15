@@ -5,6 +5,39 @@
 
 # functions used in shiny app
 
+# safe_event_data ----
+# Wrapper around plotly::event_data that suppresses the "not registered"
+# warnings unless verbose mode is enabled.
+safe_event_data <- function(event, source = "all", verbose = FALSE) {
+    if (verbose) {
+        return(event_data(event, source = source))
+    }
+    withCallingHandlers(
+        event_data(event, source = source),
+        warning = function(w) {
+            msg <- conditionMessage(w)
+            if (grepl("is not registered", msg) || grepl("event_register", msg)) {
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
+}
+
+# quiet_ggplotly ----
+# Wrapper around ggplotly that suppresses the harmless ggplot2 warning about
+# the customdata aesthetic, which is consumed by plotly after conversion.
+quiet_ggplotly <- function(p, ...) {
+    withCallingHandlers(
+        ggplotly(p, ...),
+        warning = function(w) {
+            msg <- conditionMessage(w)
+            if (grepl("Ignoring unknown aesthetics: customdata", msg)) {
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
+}
+
 # highlight_df = function ----
 highlight_df <- function(x, y, rs, somCodesName = "SOM_codes", metaD = NULL) {
     if (is.null(metaD)) stop("'metaD' must be provided")
@@ -80,6 +113,8 @@ countBarPlotFunc <- function(rs, clusterPatientTable, cst, sce, outputList, grou
 }
 
 
+# Deprecated alias kept for backward compatibility.
+# Prefer .computeRelativeCounts() in new code.
 compute_relative_counts <- function(clusterPatientTable, rs, relativeToCol, expInfo, outputList) {
     switch(relativeToCol,
         "none" = rowSums(clusterPatientTable[, rs, drop = FALSE]) /
@@ -239,7 +274,7 @@ somPlot <- function(pp1, plotIdx, rs, colorbyGroups, showGroups, dimSelection = 
     if (plotIdx > 5) plotIdx <- 6
 
 
-    ggplotly(p3, source = paste0("somData", plotIdx), tooltip = "") %>%
+    quiet_ggplotly(p3, source = paste0("somData", plotIdx), tooltip = "") %>%
         layout(showlegend = FALSE, dragmode = "select") %>%
         event_register("plotly_selected") %>%
         event_register("plotly_relayout")
@@ -364,40 +399,48 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
         mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
     }
     # browser()
-    p3 <- ggplot(
-        data = df,
-        aes(
-            x = .data[[colN[1]]], y = .data[[colN[2]]],
-            text = paste(
-                "cluster: ", cluster, "<br>N cells: ", N, "<br>mean: ",
-                format(mean, digits = 2), "<br>3rd Q: ",
-                format(thrdQu, digits = 2), "<br>max: ",
-                format(max, digits = 2)
-            ),
-            customdata = seq(nrow(df))
-        )
-    )
-    if (nGrps == 1) {
-        p3 <- p3 + geom_point(show.legend = sl, color = "lightblue")
-    } else {
-        p3 <- p3 + geom_point(show.legend = sl, aes(color = colGrp)) +
-            scale_color_manual(values = mycolors[seq_len(nGrps)])
-    }
-
-    p3 <- p3 +
-        geom_point(
-            data = df[rs, ],
+    p3 <- withCallingHandlers(
+        ggplot(
+            data = df,
             aes(
-                x = .data[[colN[1]]],
-                y = .data[[colN[2]]],
-                customdata = rs
-            ),
-            color = "red",
-            size = 0.3
+                x = .data[[colN[1]]], y = .data[[colN[2]]],
+                text = paste(
+                    "cluster: ", cluster, "<br>N cells: ", N, "<br>mean: ",
+                    format(mean, digits = 2), "<br>3rd Q: ",
+                    format(thrdQu, digits = 2), "<br>max: ",
+                    format(max, digits = 2)
+                ),
+                customdata = seq_len(nrow(df))
+            )
         ) +
-        theme_minimal() +
-        theme(legend.position = "bottom") +
-        guides(colour = guide_legend(nrow = as.integer(nGrps / 3 + 1), title = ""))
+            if (nGrps == 1) {
+                geom_point(show.legend = sl, color = "lightblue")
+            } else {
+                list(
+                    geom_point(show.legend = sl, aes(color = colGrp)),
+                    scale_color_manual(values = mycolors[seq_len(nGrps)])
+                )
+            } +
+            geom_point(
+                data = df[rs, ],
+                aes(
+                    x = .data[[colN[1]]],
+                    y = .data[[colN[2]]],
+                    customdata = rs
+                ),
+                color = "red",
+                size = 0.3
+            ) +
+            theme_minimal() +
+            theme(legend.position = "bottom") +
+            guides(color = guide_legend(nrow = as.integer(nGrps / 3 + 1), title = "")),
+        warning = function(w) {
+            msg <- conditionMessage(w)
+            if (grepl("Ignoring unknown aesthetics: customdata", msg)) {
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
 
     return(p3)
 }
@@ -466,10 +509,10 @@ upsetPlotFunc <- function(upsetSelection, outputList, sce) {
     cm <- ComplexHeatmap::make_comb_mat(outputList[upsetSelection])
     ncells <- rep(0, length(ComplexHeatmap::comb_name(cm)))
     grpCells <- rep(0, length(upsetSelection))
-    for (cidx in seq(ComplexHeatmap::comb_name(cm))) {
+    for (cidx in seq_along(ComplexHeatmap::comb_name(cm))) {
         ncells[cidx] <- S4Vectors::metadata(sce)$SOM_stats[as.integer(ComplexHeatmap::extract_comb(cm, ComplexHeatmap::comb_name(cm)[cidx])), "n"] %>% sum()
     }
-    for (olIdx in seq(upsetSelection)) {
+    for (olIdx in seq_along(upsetSelection)) {
         grpCells[olIdx] <- S4Vectors::metadata(sce)$SOM_stats[as.integer(outputList[[upsetSelection[olIdx]]]), "n"] %>% sum()
     }
     names(ncells) <- ComplexHeatmap::comb_name(cm)
