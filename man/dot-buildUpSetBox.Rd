@@ -13,6 +13,7 @@
 A \code{shinydashboardPlus::box} UI object.
 }
 \description{
-Build UpSet Plot UI
+UpSet-style overlap visualisation of saved cluster groups. Users choose which
+groups to compare.
 }
 \keyword{internal}

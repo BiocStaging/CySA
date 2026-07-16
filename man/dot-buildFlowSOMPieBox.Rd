@@ -10,6 +10,7 @@
 A \code{shinydashboardPlus::box} UI object.
 }
 \description{
-Build FlowSOM Marker Pies UI
+Displays each selected SOM node as a pie chart coloured by mean marker
+expression. Users control the grid layout and pie size.
 }
 \keyword{internal}

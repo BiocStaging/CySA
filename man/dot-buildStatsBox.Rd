@@ -17,6 +17,7 @@
 A \code{shinydashboardPlus::box} UI object.
 }
 \description{
-Build Stats UI
+Statistics panel: compare cell counts, compute percentages, run sample-group
+t-tests, and display the results as tables and bar plots.
 }
 \keyword{internal}

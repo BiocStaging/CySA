@@ -15,6 +15,7 @@
 A \code{shinydashboardPlus::box} UI object.
 }
 \description{
-Build Violin Plots UI
+Marker expression violin plots for the saved cluster groups. Users choose
+which markers are shown.
 }
 \keyword{internal}

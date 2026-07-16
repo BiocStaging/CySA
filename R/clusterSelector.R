@@ -109,10 +109,10 @@ clusterSelector <- function(sce, # main input has to contain:
                             fsom = NULL,
                             env = environment(),
                             verbose = FALSE) {
-    for (idx in seq_along(dList)) {
-        assign(paste0("d", idx, ".1"), dList[[idx]][1])
-        assign(paste0("d", idx, ".2"), dList[[idx]][2])
-    }
+    # for (idx in seq_along(dList)) {
+    #     assign(paste0("d", idx, ".1"), dList[[idx]][1])
+    #     assign(paste0("d", idx, ".2"), dList[[idx]][2])
+    # }
 
     metaD <- .validateClusterSelectorInputs(
         sce, sce_subsampled, outputList, dList, dend, dendTable,
@@ -157,16 +157,19 @@ clusterSelector <- function(sce, # main input has to contain:
 
     assign(x = "outputList", value = outputList, envir = env)
 
+
     # nPlots = 15
     # nPlots = 6
 
     ## UI ----
     ui <- shinydashboard::dashboardPage(
         shinydashboard::dashboardHeader(title = "Cluster Selector"),
-        sidebar = .buildClusterSelectorSidebar(sce, dList, outputList, nPlots),
+        sidebar = .buildClusterSelectorSidebar(sce, outputList, nPlots),
         body = shinydashboard::dashboardBody(
             .buildFirstBodyRow(colTree, nPlots),
-            .buildSOM2DPlotsBox(nPlots, colsUsed, outputList),
+            .buildSOM2DPlotsBox(nPlots, colsUsed, outputList,
+                                markers = rnSCE, dList = dList),
+            .buildSixStaticSOMBox(markers = rnSCE, dList = dList),
             .buildFlowSOMPieBox(),
             .buildFlowSOMStarsBox(fsom),
             .buildStatsBox(metaD, somCodesName, outputList),
@@ -200,6 +203,323 @@ clusterSelector <- function(sce, # main input has to contain:
                 colTree
             })
         }
+        # activeDims ----
+        # Debounced to absorb the brief window when a preset-pair change sends two
+        # updateSelectInput messages (one for X, one for Y) in the same flush cycle.
+        activeDims <- shiny::reactive({
+            x <- input$currentDimX
+            y <- input$currentDimY
+            shiny::req(x, y)
+            c(x, y)
+        }) %>% shiny::debounce(250)
+        ## ── dListRV: reactive store for the pair list ─────────────────────────────
+        dListRV <- shiny::reactiveVal(dList)
+
+        ## ── in-session base-plot cache ────────────────────────────────────────────
+        ## Avoids re-running plotSOMScatter (the expensive part) when only rs changes.
+        ## Key: ch1 + ch2 + colorVar + sizeVar.  Lives for the Shiny session.
+        .bpCache <- new.env(parent = emptyenv())
+        getBasePlot <- function(ch1, ch2, colorVar, sizeVar) {
+            key <- paste(ch1, ch2, colorVar, sizeVar, sep = "\x01")
+            if (exists(key, envir = .bpCache, inherits = FALSE)) {
+                return(.bpCache[[key]])
+            }
+            pp1 <- plotSOMScatter(
+                x         = sce,
+                chs       = c(ch1, ch2),
+                pointSize = sizeVar,
+                color_by  = colorVar,
+                zeros     = TRUE,
+                xRN       = sceRN,
+                xCN       = sceCN
+            )
+            .bpCache[[key]] <- pp1
+            pp1
+        }
+
+        ## ── helper: rebuild remove-picker choices from a pair list ────────────────
+        .pairChoices <- function(lst) {
+            if (length(lst) == 0L) return(character(0L))
+            labels <- vapply(lst,
+                             function(p) paste(p[1L], "\u00b7", p[2L]), character(1L))
+            stats::setNames(seq_along(lst), labels)
+        }
+
+        ## ── dynamic preset picker in the SOM 2D plots box ─────────────────────────
+        output$dimPairSelectUI <- shiny::renderUI({
+            current <- dListRV()
+            if (length(current) == 0L) return(NULL)
+            pair_labels <- vapply(current,
+                                  function(p) paste(p[1L], "\u00b7", p[2L]), character(1L))
+            shiny::selectInput(
+                inputId   = "dimPairSelect",
+                label     = "Preset pair",
+                choices   = stats::setNames(seq_along(current), pair_labels),
+                selected  = "1",
+                multiple  = FALSE,
+                selectize = FALSE,   # native <select>: no overflow in narrow column
+                width     = "100%"
+            )
+        })
+
+        ## ── preset pair → update axis selects ────────────────────────────────────
+        shiny::observeEvent(input$dimPairSelect, {
+            idx     <- suppressWarnings(as.integer(input$dimPairSelect))
+            current <- dListRV()
+            if (is.na(idx) || idx < 1L || idx > length(current)) return(NULL)
+            pair <- current[[idx]]
+            shiny::updateSelectInput(session, "currentDimX", selected = pair[1L])
+            shiny::updateSelectInput(session, "currentDimY", selected = pair[2L])
+        }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+        ## ── Add pair ──────────────────────────────────────────────────────────────
+        shiny::observeEvent(input$staticSomAdd, {
+            shiny::req(input$staticSomX, input$staticSomY)
+            new_pair <- c(input$staticSomX, input$staticSomY)
+            current  <- dListRV()
+
+            ## Reject exact duplicates (same X and Y in same order)
+            is_dup <- any(vapply(current,
+                                 function(p) identical(p, new_pair), logical(1L)))
+            if (is_dup) {
+                shiny::showNotification(
+                    paste("Pair", new_pair[1L], "\u00b7", new_pair[2L], "already exists."),
+                    type = "warning", duration = 3L
+                )
+                return(NULL)
+            }
+
+            new_list <- c(current, list(new_pair))
+            dListRV(new_list)
+
+            shiny::updateSelectInput(session, "staticSomRemove",
+                                     choices  = .pairChoices(new_list),
+                                     selected = as.character(length(new_list))   # select the new entry
+            )
+        })
+
+        ## ── Remove pair ───────────────────────────────────────────────────────────
+        shiny::observeEvent(input$staticSomRemoveBtn, {
+            current <- dListRV()
+            idx     <- suppressWarnings(as.integer(input$staticSomRemove))
+            if (is.na(idx) || idx < 1L || idx > length(current)) return(NULL)
+
+            new_list <- current[-idx]
+            dListRV(new_list)
+
+            new_sel <- as.character(max(1L, idx - 1L))
+            shiny::updateSelectInput(session, "staticSomRemove",
+                                     choices  = .pairChoices(new_list),
+                                     selected = new_sel
+            )
+        })
+
+        ## ── Dynamic plot grid UI ──────────────────────────────────────────────────
+        output$staticSomGrid <- shiny::renderUI({
+            current <- dListRV()
+            n_cols  <- as.integer(input$staticSomCols)
+            if (is.na(n_cols) || n_cols < 1L) n_cols <- 3L
+            height  <- paste0(
+                if (is.null(input$staticSomHeight)) 240L else input$staticSomHeight,
+                "px"
+            )
+
+            if (length(current) == 0L) {
+                return(htmltools::tags$p(
+                    "No pairs configured. Use the controls above to add pairs.",
+                    style = "color:#aaa; font-style:italic; padding:12px;"
+                ))
+            }
+
+            col_width <- 12L %/% n_cols
+
+            panels <- lapply(seq_along(current), function(i) {
+                pair <- current[[i]]
+                shiny::column(
+                    width = col_width,
+                    htmltools::tags$p(
+                        paste(pair[1L], "\u00b7", pair[2L]),
+                        style = paste(
+                            "font-size:11px; font-weight:600;",
+                            "text-align:center; margin:4px 0 2px; color:#555;"
+                        )
+                    ),
+                    shiny::plotOutput(paste0("staticSomDyn", i), height = height)
+                )
+            })
+
+            ## Chunk into rows of n_cols
+            row_starts <- seq(1L, length(panels), by = n_cols)
+            rows <- lapply(row_starts, function(s) {
+                do.call(shiny::fluidRow,
+                        panels[s:min(s + n_cols - 1L, length(panels))])
+            })
+            do.call(htmltools::tagList, rows)
+        })
+
+        ## ── Dynamic renderPlot registration ──────────────────────────────────────
+        ## Re-runs only when dListRV() changes (pair added / removed).
+        ## Re-registering an existing output ID is safe in Shiny (replaces renderer).
+        ## Changing staticSomCols/Height only affects the UI grid, not this observer.
+        shiny::observe({
+            current <- dListRV()
+
+            lapply(seq_along(current), function(idx) {
+                local({
+                    i      <- idx
+                    pair_i <- current[[i]]
+                    out_id <- paste0("staticSomDyn", i)
+
+                    output[[out_id]] <- shiny::renderPlot({
+                        rs       <- rsUsed_d()
+                        shiny::req(rs)
+                        colorVar <- if (is.null(input$somColorVar)) "n"   else input$somColorVar
+                        sizeVar  <- if (is.null(input$somSizeVar))  "max" else input$somSizeVar
+                        pctl     <- if (is.null(input$scatterPercentile)) 0.99 else input$scatterPercentile
+
+                        ## Expensive base scatter — served from cache when args unchanged
+                        pp1 <- getBasePlot(pair_i[1L], pair_i[2L], colorVar, sizeVar)
+                        shiny::req(pp1)
+
+                        lim1 <- channelLimits[[pair_i[1L]]]
+                        lim2 <- channelLimits[[pair_i[2L]]]
+                        if (is.null(lim1)) lim1 <- c(min = 0, max = 1)
+                        if (is.null(lim2)) lim2 <- c(min = 0, max = 1)
+
+                        dimSel_i <- list(list(
+                            dims  = pair_i,
+                            xlim  = c(lim1["min"], lim1["max"]),
+                            ylim  = c(lim2["min"], lim2["max"]),
+                            xzoom = c(NULL, NULL),
+                            yzoom = c(NULL, NULL)
+                        ))
+
+                        tailP     <- (1 - pctl) / 2
+                        somCodes  <- metaD[[somCodesName]]
+                        xlimP <- if (pair_i[1L] %in% colnames(somCodes))
+                            stats::quantile(somCodes[, pair_i[1L]],
+                                            probs = c(tailP, 1 - tailP), na.rm = TRUE)
+                        else NULL
+                        ylimP <- if (pair_i[2L] %in% colnames(somCodes))
+                            stats::quantile(somCodes[, pair_i[2L]],
+                                            probs = c(tailP, 1 - tailP), na.rm = TRUE)
+                        else NULL
+
+                        ## Cheap: adds red overlay to cached base plot
+                        ggsomPlot(pp1, 1L, rs, dimSel_i,
+                                  sce   = sce,
+                                  metaD = metaD,
+                                  xlim  = xlimP,
+                                  ylim  = ylimP)
+                    })
+
+                    ## Suspend while box is collapsed — no renders until user opens it
+                    shiny::outputOptions(output, out_id, suspendWhenHidden = TRUE)
+                })
+            })
+        })
+        # obs dimPairSelect ----
+        # When the user clicks a preset radio button, sync the X/Y selects.
+        # ignoreInit = TRUE keeps startup free of a redundant update.
+        shiny::observeEvent(input$dimPairSelect, {
+            idx <- suppressWarnings(as.integer(input$dimPairSelect))
+            if (is.na(idx) || idx < 1L || idx > length(dList)) return(NULL)
+            pair <- dList[[idx]]
+            shiny::updateSelectInput(session, "currentDimX", selected = pair[1L])
+            shiny::updateSelectInput(session, "currentDimY", selected = pair[2L])
+        }, ignoreInit = TRUE, ignoreNULL = TRUE)
+
+        # somBasePlot ----
+        # Single cached SOM scatter base plot. Only recomputes when dims, color, or
+        # size variable change — NOT when rs or colorbyGroups change.
+        somBasePlot <- shiny::reactive({
+            dims     <- activeDims()
+            colorVar <- input$somColorVar
+            sizeVar  <- input$somSizeVar
+            if (is.null(colorVar)) colorVar <- "n"
+            if (is.null(sizeVar))  sizeVar  <- "max"
+            shiny::req(dims)
+            plotSOMScatter(
+                x         = sce,
+                chs       = dims,
+                pointSize = sizeVar,
+                color_by  = colorVar,
+                zeros     = TRUE,
+                xRN       = sceRN,
+                xCN       = sceCN
+            )
+        }) %>% shiny::bindCache(activeDims(), input$somColorVar, input$somSizeVar)
+
+        # somProjectionDf ----
+        # Pre-join of SOM stats into the 2D coordinate frame.  Cached per dim pair so
+        # that switching colorbyGroups or rs does not redo the ggplot_build + join.
+        somProjectionDf <- shiny::reactive({
+            pp1    <- somBasePlot()
+            dimSel <- dimSelection()
+            shiny::req(pp1, length(dimSel) >= 1L)
+            buildProjectionDf(pp1, 1L, dimSel, sce,
+                              somCodesName = somCodesName)   # <-- add this
+        }) %>% shiny::bindCache(activeDims())
+
+        # output$somDataMain ----
+        output$somDataMain <- plotly::renderPlotly({
+            colorbyGroups <- input$colorbyGroups
+            selectedUpdate2()
+            showGroups <- input$showGroups
+            dimSel     <- dimSelection()
+            shiny::req(length(dimSel) >= 1L)
+            rs <- rsUsed_d()
+            shiny::req(rs)
+            triggerRedraw()
+
+            dims <- dimSel[[1L]]$dims
+            pp1  <- somBasePlot()
+            pDf  <- if (isTRUE(showGroups)) somProjectionDf() else NULL
+
+            pctl  <- input$scatterPercentile
+            if (is.null(pctl)) pctl <- 0.99
+            tailP     <- (1 - pctl) / 2
+            somCodes  <- metaD[[somCodesName]]
+            xlimP <- if (dims[1L] %in% colnames(somCodes))
+                stats::quantile(somCodes[, dims[1L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            else NULL
+            ylimP <- if (dims[2L] %in% colnames(somCodes))
+                stats::quantile(somCodes[, dims[2L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            else NULL
+
+            somPlot(
+                pp1, 1L, rs, colorbyGroups, showGroups,
+                dimSelection = dimSel,
+                sce          = sce,
+                metaD        = metaD,
+                outputList   = rv$outputList,
+                projectionDf = pDf,
+                xlim         = xlimP,
+                ylim         = ylimP,
+                source       = "somDataMain"   # explicit source — no longer derived from plotIdx
+            )
+        })
+
+        # obs somDataMain selection ----
+        shiny::observeEvent(
+            safe_event_data(verbose = verbose, "plotly_selected", source = "somDataMain"),
+            {
+                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somDataMain")
+                if (is.null(d)) return(NULL)
+                rs <- shiny::isolate(rsUsed_d())
+                shiny::req(rs)
+                d <- .inputSelect(d, rs, shiny::isolate(input$selectMode))
+                shiny::isolate(rsUsed(d))
+            }
+        )
+
+        # obs somDataMain zoom ----
+        shiny::observe({
+            zoom <- safe_event_data(
+                verbose = verbose, "plotly_relayout", source = "somDataMain"
+            )
+            zoomFunc(zoom, 1L)
+        })
 
         # force redraw if selected group is used
         selectedUpdate2 <- reactiveVal(value = 0)
@@ -219,102 +539,115 @@ clusterSelector <- function(sce, # main input has to contain:
             }
         })
 
-        # dim UI ----
-        #
+        ## flowSOMPie dynamic height ----
+        ## Computes total plot height from (number of rows) × (pixels per pie).
+        ## This keeps each pie a consistent size as the selection grows or shrinks.
+        output$flowSOMPieUI <- shiny::renderUI({
+            rs       <- rsUsed()
+            n_nodes  <- max(1L, length(rs))
+            n_cols   <- max(1L, as.integer(input$flowSOMPieCols))
+            pie_px   <- max(50L, as.integer(
+                if (is.null(input$flowSOMPieSize)) 150L else input$flowSOMPieSize
+            ))
+
+            n_rows       <- ceiling(n_nodes / n_cols)
+            ## Add 60 px for the shared legend at the bottom of the ggplot
+            total_height <- n_rows * pie_px + 60L
+
+            shiny::plotOutput(
+                "flowSOMPie",
+                height = paste0(total_height, "px")
+            ) %>% shinyjqui::jqui_resizable()
+        })
 
         choicesRV <- reactiveValues(trigger = 1)
 
         observe({
             choicesRV$trigger
         })
+        ## Six static SOM views ----
+        ## Each pair gets its own cached base-plot reactive + a renderPlot output.
+        ## outputOptions(suspendWhenHidden) means the plots are never computed while
+        ## the box is collapsed, eliminating six ggsomPlot calls at startup.
 
-        output$dimUI <- renderUI({
-            triggered <- choicesRV$trigger
-            if (!is.null(triggered)) {
-            }
-            tagsX <- list()
-            if (!base::exists("d1.1")) { # lets assume that if one is set all are set
-                ridx <- 1
-                for (idx in seq_len(nPlots)) {
-                    assign(paste0("d", idx, ".1"), rownames(sce)[ridx])
-                    ridx <- ridx + 1
-                    assign(paste0("d", idx, ".2"), rownames(sce)[ridx])
-                    ridx <- ridx + 1
-                }
-            }
-            for (idx in seq_len(nPlots)) {
-                tagsX[[length(tagsX) + 1]] <- fluidRow(
-                    style = "margin-left: 0; margin-right: 0;",
-                    column(
-                        width = 6, style = "padding-left: 2px; padding-right: 2px;",
-                        selectInput(paste0("d", idx, ".1"),
-                                    paste0("X", idx),
-                                    choices = rownames(sce),
-                                    selected = get(paste0("d", idx, ".1")),
-                                    multiple = FALSE, selectize = TRUE, width = "100%"
-                        )
-                    ),
-                    column(
-                        width = 6, style = "padding-left: 2px; padding-right: 2px;",
-                        selectInput(
-                            inputId = paste0("d", idx, ".2"),
-                            label = paste0("Y", idx),
-                            choices = rownames(sce),
-                            selected = get(paste0("d", idx, ".2")),
-                            multiple = FALSE, selectize = TRUE, width = "100%"
-                        )
+            n_static <- min(6L, length(dList))
+
+            ## Non-reactive per-pair dim-selection slots (axis limits fixed at startup).
+            staticDimSelections <- lapply(seq_len(n_static), function(idx) {
+                pair <- dList[[idx]]
+                lim1 <- channelLimits[[pair[1L]]]
+                lim2 <- channelLimits[[pair[2L]]]
+                if (is.null(lim1)) lim1 <- c(min = 0, max = 1)
+                if (is.null(lim2)) lim2 <- c(min = 0, max = 1)
+                list(
+                    dims  = pair,
+                    xlim  = c(lim1["min"], lim1["max"]),
+                    ylim  = c(lim2["min"], lim2["max"]),
+                    xzoom = c(NULL, NULL),
+                    yzoom = c(NULL, NULL)
+                )
+            })
+
+            ## One cached base-plot reactive per pair.
+            ## Cache key: pair index + color/size variables.
+            ## Invalidates only when the user changes somColorVar or somSizeVar —
+            ## NOT when rs or colorbyGroups change.
+            staticBasePlots <- lapply(seq_len(n_static), function(idx) {
+                shiny::reactive({
+                    colorVar <- input$somColorVar
+                    sizeVar  <- input$somSizeVar
+                    if (is.null(colorVar)) colorVar <- "n"
+                    if (is.null(sizeVar))  sizeVar  <- "max"
+                    pair <- dList[[idx]]
+                    plotSOMScatter(
+                        x         = sce,
+                        chs       = pair,
+                        pointSize = sizeVar,
+                        color_by  = colorVar,
+                        zeros     = TRUE,
+                        xRN       = sceRN,
+                        xCN       = sceCN
                     )
+                }) %>% shiny::bindCache(idx, input$somColorVar, input$somSizeVar)
+            })
+
+            ## renderPlot (static, not plotly) outputs — one per pair.
+            lapply(seq_len(n_static), function(idx) {
+                output[[paste0("staticSom", idx)]] <- shiny::renderPlot({
+                    rs <- rsUsed_d()
+                    shiny::req(rs)
+                    pp1 <- staticBasePlots[[idx]]()
+                    shiny::req(pp1)
+
+                    dimSel   <- list(staticDimSelections[[idx]])
+                    somCodes <- metaD[[somCodesName]]
+                    pair     <- dList[[idx]]
+                    pctl     <- input$scatterPercentile
+                    if (is.null(pctl)) pctl <- 0.99
+                    tailP <- (1 - pctl) / 2
+
+                    xlimP <- if (pair[1L] %in% colnames(somCodes))
+                        stats::quantile(somCodes[, pair[1L]],
+                                        probs = c(tailP, 1 - tailP), na.rm = TRUE)
+                    else NULL
+                    ylimP <- if (pair[2L] %in% colnames(somCodes))
+                        stats::quantile(somCodes[, pair[2L]],
+                                        probs = c(tailP, 1 - tailP), na.rm = TRUE)
+                    else NULL
+
+                    ggsomPlot(pp1, 1L, rs, dimSel,
+                              sce   = sce,
+                              metaD = metaD,
+                              xlim  = xlimP,
+                              ylim  = ylimP)
+                })
+
+                ## Suspend while the box is collapsed — no wasted renders.
+                shiny::outputOptions(
+                    output, paste0("staticSom", idx),
+                    suspendWhenHidden = TRUE
                 )
-            }
-
-            tagList(tagsX)
-        })
-
-
-        shiny::observeEvent(input$applyDimSelection, {
-
-            inputList <- input$d2Axes
-            newVals <- lapply(inputList[seq_len(min(6, length(inputList)))], FUN = function(x) str_split(string = x, pattern = " - ")) %>% unlist()
-            ridx <- 1
-            for (idx in seq_len(nPlots)) {
-                assign(paste0("d", idx, ".1"), newVals[ridx])
-                ridx <- ridx + 1
-                assign(paste0("d", idx, ".2"), newVals[ridx])
-                ridx <- ridx + 1
-            }
-            for (idx in seq_len(nPlots)) {
-                updateSelectInput(
-                    session = session,
-                    inputId = paste0("d", idx, ".1"),
-                    selected = get(paste0("d", idx, ".1")),
-                )
-                updateSelectInput(
-                    session = session,
-                    inputId = paste0("d", idx, ".2"),
-                    selected = get(paste0("d", idx, ".2")),
-                )
-            }
-            choicesRV$trigger <- choicesRV$trigger + 1
-        })
-
-        # UI Choose a plot index ----
-        output$axesUI <- renderUI({
-            if (is.null(input[["d1.1"]])) return(NULL)
-
-            choices <- list()
-            for (idx in seq_len(nPlots)) {
-                if (input[[paste0("d", idx, ".1")]] %in% rnSCE) {
-                    choices[[paste0(input[[paste0("d", idx, ".1")]], "/", input[[paste0("d", idx, ".2")]])]] <- idx
-                }
-            }
-            # browser()
-            radioButtons("d2Axes1",
-                         "Choose a plot index :",
-                         choices = choices,
-                         selected = 1,
-                         inline = FALSE
-            )
-        })
+            })
 
         # observe clusterNameSelect ----
         # print clusters based on selection
@@ -532,85 +865,160 @@ clusterSelector <- function(sce, # main input has to contain:
         })
 
         # interactive dendrogram ----
-        dendPlotlyData <- reactive({
-            g <- dendextend::as.ggdend(dend)
-            list(segments = g$segments, labels = g$labels)
+        dendPlotlyData <- shiny::reactive({
+            g      <- dendextend::as.ggdend(dend)
+            labels <- g$labels
+
+            ## Map character leaf labels → integer cluster ids via dendTable.
+            ## Falls back to direct as.integer() when dendTable is not available or
+            ## when the labels are already pure integer strings.
+            if (!is.null(dendTable) && all(c("id", "label") %in% colnames(dendTable))) {
+                labels <- dplyr::left_join(
+                    labels,
+                    dendTable[, c("id", "label")],
+                    by = "label"
+                )
+            } else {
+                labels$id <- suppressWarnings(as.integer(as.character(labels$label)))
+            }
+
+            list(segments = g$segments, labels = labels)
         })
 
-        output$dendPlotly <- renderPlotly({
+        output$dendPlotly <- plotly::renderPlotly({
             dd <- dendPlotlyData()
             rs <- rsUsed()
-            req(dd, rs)
-            label_cols <- ifelse(dd$labels$label %in% as.character(rs), "red", "black")
-            p <- ggplot() +
-                geom_segment(
-                    data = dd$segments,
-                    aes(x = x, y = y, xend = xend, yend = yend)
-                ) +
-                geom_point(
-                    data = dd$labels,
-                    aes(x = x, y = y, customdata = label),
-                    color = label_cols
-                ) +
-                geom_text(
-                    data = dd$labels,
-                    aes(x = x, y = y, label = label),
-                    vjust = 1, size = 3
-                ) +
-                theme_minimal() +
-                theme(
-                    axis.text = element_blank(),
-                    axis.title = element_blank(),
-                    panel.grid = element_blank()
+            shiny::req(dd, rs)
+
+            lab_df  <- dd$labels
+            seg_df  <- dd$segments
+            rs_int  <- as.integer(rs)
+
+            ## Colour leaf nodes: red = selected, black = unselected
+            node_col <- ifelse(
+                !is.na(lab_df$id) & lab_df$id %in% rs_int,
+                "red", "black"
+            )
+
+            ## Extend y slightly below 0 so leaf points are never clipped.
+            y_min <- min(c(seg_df$y, seg_df$yend, lab_df$y), na.rm = TRUE)
+            y_max <- max(c(seg_df$y, seg_df$yend, lab_df$y), na.rm = TRUE)
+            y_pad <- (y_max - y_min) * 0.08
+
+            plotly::plot_ly(source = "dendPlotly") %>%
+                ## Trace 0: branch segments (not selectable, no customdata)
+                plotly::add_segments(
+                    data       = seg_df,
+                    x          = ~x,    y    = ~y,
+                    xend       = ~xend, yend = ~yend,
+                    line       = list(color = "black", width = 1L),
+                    hoverinfo  = "none",
+                    showlegend = FALSE
+                ) %>%
+                ## Trace 1: leaf points — customdata holds the integer cluster id
+                plotly::add_markers(
+                    data       = lab_df,
+                    x          = ~x,
+                    y          = ~y,
+                    customdata = ~id,          # integer id, not the character label
+                    marker     = list(
+                        color = node_col,
+                        size  = 10L,
+                        line  = list(color = "white", width = 1L)
+                    ),
+                    hoverinfo  = "none",
+                    showlegend = FALSE
+                ) %>%
+                ## Trace 2: leaf text labels
+                plotly::add_text(
+                    data         = lab_df,
+                    x            = ~x,
+                    y            = ~y,
+                    text         = ~label,
+                    textposition = "bottom center",
+                    textfont     = list(size = 9L, color = node_col),
+                    hoverinfo    = "none",
+                    showlegend   = FALSE
+                ) %>%
+                plotly::layout(
+                    dragmode     = "select",
+                    showlegend   = FALSE,
+                    xaxis = list(
+                        visible  = FALSE,
+                        showgrid = FALSE,
+                        zeroline = FALSE
+                    ),
+                    yaxis = list(
+                        visible  = FALSE,
+                        showgrid = FALSE,
+                        zeroline = FALSE,
+                        range    = c(y_min - y_pad, y_max + y_pad)
+                    ),
+                    plot_bgcolor  = "rgba(0,0,0,0)",
+                    paper_bgcolor = "rgba(0,0,0,0)",
+                    margin        = list(l = 5, r = 5, t = 5, b = 5)
+                ) %>%
+                plotly::event_register("plotly_selected") %>%
+                plotly::event_register("plotly_click")
+        })
+
+        shiny::observeEvent(
+            safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly"),
+            {
+                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly")
+                if (is.null(d) || nrow(d) == 0L) return(NULL)
+
+                ## Keep only the leaf-point trace (curveNumber == 1)
+                if ("curveNumber" %in% names(d)) {
+                    d <- d[d$curveNumber == 1L, , drop = FALSE]
+                }
+                if (nrow(d) == 0L || is.null(d$customdata)) return(NULL)
+
+                clicked <- as.integer(unlist(d$customdata))
+                clicked <- clicked[!is.na(clicked) & clicked > 0L]
+                if (length(clicked) == 0L) return(NULL)
+
+                rs   <- shiny::isolate(rsUsed_d())
+                mode <- shiny::isolate(input$selectMode)
+                new_rs <- switch(
+                    EXPR = mode,
+                    "remove others" = clicked,
+                    "add"           = unique(c(rs, clicked)),
+                    "remove"        = setdiff(rs, clicked),
+                    clicked
                 )
-            quiet_ggplotly(p, source = "dendPlotly", tooltip = "") %>%
-                layout(dragmode = "select") %>%
-                event_register("plotly_selected") %>%
-                event_register("plotly_click")
-        })
-
-        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly"), {
-            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly")
-            if (is.null(d) || nrow(d) == 0 || is.null(d$customdata)) {
-                return(NULL)
+                shiny::isolate(rsUsed(new_rs))
             }
-            clicked <- as.integer(d$customdata)
-            rs <- isolate(rsUsed_d())
-            mode <- isolate(input$selectMode)
-            new_rs <- switch(EXPR = mode,
-                             "remove others" = clicked,
-                             "add" = unique(c(rs, clicked)),
-                             "remove" = setdiff(rs, clicked),
-                             clicked
-            )
-            isolate(rsUsed(new_rs))
-        })
+        )
 
-        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly"), {
-            d <- safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly")
-            if (is.null(d) || is.null(d$customdata)) {
-                return(NULL)
+        shiny::observeEvent(
+            safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly"),
+            {
+                d <- safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly")
+                if (is.null(d) || nrow(d) == 0L) return(NULL)
+
+                ## Keep only the leaf-point trace (curveNumber == 1)
+                if ("curveNumber" %in% names(d)) {
+                    d <- d[d$curveNumber == 1L, , drop = FALSE]
+                }
+                if (nrow(d) == 0L || is.null(d$customdata)) return(NULL)
+
+                clicked <- as.integer(unlist(d$customdata))
+                clicked <- clicked[!is.na(clicked) & clicked > 0L]
+                if (length(clicked) == 0L) return(NULL)
+
+                rs   <- shiny::isolate(rsUsed_d())
+                mode <- shiny::isolate(input$selectMode)
+                new_rs <- switch(
+                    EXPR = mode,
+                    "remove others" = clicked,
+                    "add"           = unique(c(rs, clicked)),
+                    "remove"        = setdiff(rs, clicked),
+                    clicked
+                )
+                shiny::isolate(rsUsed(new_rs))
             }
-            clicked <- as.integer(d$customdata)
-            rs <- isolate(rsUsed_d())
-            mode <- isolate(input$selectMode)
-            new_rs <- switch(EXPR = mode,
-                             "remove others" = clicked,
-                             "add" = unique(c(rs, clicked)),
-                             "remove" = setdiff(rs, clicked),
-                             clicked
-            )
-            isolate(rsUsed(new_rs))
-        })
-
-        # observeEvent(input$d2Axes1 ---
-        shiny::observeEvent(input$d2Axes1, {
-            # browser()
-            activePlot(as.numeric(input$d2Axes1))
-        })
-
-        shiny::observeEvent(activePlot(), {
-        })
+        )
 
 
         # inputClusterNumber <- reactive ----
@@ -624,13 +1032,17 @@ clusterSelector <- function(sce, # main input has to contain:
         }) %>% debounce(1000)
 
         # inputClusterNumber() ----
+        # Guard: only write rsUsed when the parsed value is genuinely different.
+        # Without the setequal check, reactiveVal fires even for identical values,
+        # which would bounce updateTextInput → inputClusterNumber → rsUsed forever.
         shiny::observe({
             ic <- inputClusterNumber()
             ic <- suppressWarnings(as.integer(ic))
             ic <- ic[!is.na(ic)]
-            # normalise both sides to character before set operation
             ic <- as.integer(intersect(as.character(ic), colnames(clusterPatientTable)))
-            isolate(rsUsed(ic))
+            if (!setequal(ic, shiny::isolate(rsUsed()))) {
+                shiny::isolate(rsUsed(ic))
+            }
         })
 
         # rsUsed_d
@@ -638,7 +1050,7 @@ clusterSelector <- function(sce, # main input has to contain:
 
         # updateTextInput clusterNumbers ----
         shiny::observe({
-            rs <- as.integer(unlist(rsUsed()))     # unlist + coerce before sort
+            rs <- as.integer(unlist(rsUsed()))
             rs <- sort(rs[!is.na(rs)])
             outputList <- rv$outputList
             updateOL <- FALSE
@@ -646,9 +1058,12 @@ clusterSelector <- function(sce, # main input has to contain:
             outputList$selected <- rs
             rv$outputList <- outputList
             if (updateOL) updatedoutputList()
-            updateTextInput(inputId = "clusterNumbers", value = paste(rs, collapse = ", "))
+            new_text <- paste(rs, collapse = ", ")
+            # Guard: skip updateTextInput when the displayed text already matches
+            if (!identical(shiny::isolate(input$clusterNumbers), new_text)) {
+                updateTextInput(inputId = "clusterNumbers", value = new_text)
+            }
         })
-
 
         shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somGrid"), {
             message("somGrid touched")
@@ -661,22 +1076,6 @@ clusterSelector <- function(sce, # main input has to contain:
             }
             d <- .inputSelect(d, rs, isolate(input$selectMode))
             isolate(rsUsed(d))
-        })
-
-
-        lapply(seq_len(nPlots), function(i) {
-            observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = paste0("somData", i)), {
-                message("som", i, " touched")
-                activePlot(i)
-                rs <- isolate(rsUsed_d())
-                req(rs)
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = paste0("somData", i))
-                if (is.null(d)) {
-                    return(NULL)
-                }
-                d <- .inputSelect(d, rs, isolate(input$selectMode))
-                isolate(rsUsed(d))
-            })
         })
 
 
@@ -862,21 +1261,6 @@ clusterSelector <- function(sce, # main input has to contain:
             }
         }
 
-        # obs somData (zoom) ----
-        # Previously six identical shiny::observe blocks with plotIdx <- 1 … 6.
-        # Replaced with lapply(seq_len(nPlots), …) to match the pattern used
-        # everywhere else in the server.
-        lapply(seq_len(nPlots), function(plotIdx) {
-            shiny::observe({
-                zoom <- safe_event_data(
-                    verbose  = verbose,
-                    "plotly_relayout",
-                    source   = paste0("somData", plotIdx)
-                )
-                zoomFunc(zoom, plotIdx)
-            })
-        })
-
         # observe samples2plot. ---
         sample2PlotDb <- reactive(input$samples2plot) %>% debounce(500)
 
@@ -933,90 +1317,6 @@ clusterSelector <- function(sce, # main input has to contain:
         })
 
 
-        ###   output$somData* ----
-        # Shared base plot for each dimSelection slot, cached per channel pair.
-        # This avoids rebuilding plotSOMScatter from scratch for each of the 6 outputs.
-        somBasePlots <- lapply(seq_len(nPlots), function(plotIdx) {
-            reactive({
-                dimSel <- dimSelection()
-                req(length(dimSel) >= plotIdx)
-                dims <- dimSel[[plotIdx]]$dims
-                req(dims)
-                colorVar <- input$somColorVar
-                sizeVar <- input$somSizeVar
-                if (is.null(colorVar)) colorVar <- "n"
-                if (is.null(sizeVar)) sizeVar <- "max"
-                plotSOMScatter(
-                    x = sce,
-                    chs = c(dims[1], dims[2]),
-                    pointSize = sizeVar,
-                    color_by = colorVar,
-                    zeros     = TRUE,
-                    xRN = sceRN, xCN = sceCN
-                )
-            }) %>%
-                bindCache({
-                    ds <- dimSelection()
-                    if (length(ds) >= plotIdx && !is.null(ds[[plotIdx]]$dims))
-                        ds[[plotIdx]]$dims
-                    else
-                        NULL
-                },
-                input$somColorVar,
-                input$somSizeVar
-                )
-        })
-
-        # Cached projection data frames for the showGroups SOM view.
-        # This avoids repeating ggplot_build() + left_join() every time rs or
-        # colorbyGroups change; only the final ggplot construction remains.
-        projectionDfs <- lapply(seq_len(nPlots), function(plotIdx) {
-            reactive({
-                pp1 <- somBasePlots[[plotIdx]]()
-                req(pp1)
-                buildProjectionDf(pp1, plotIdx, dimSelection(), sce)
-            }) %>%
-                bindCache({
-                    ds <- dimSelection()
-                    if (length(ds) >= plotIdx && !is.null(ds[[plotIdx]]$dims))
-                        ds[[plotIdx]]$dims
-                    else
-                        NULL
-                })
-        })
-
-        lapply(seq_len(nPlots), function(i) {
-            local({
-                plotIdxLocal <- i
-                output[[paste0("somData", plotIdxLocal)]] <- renderPlotly({
-                    colorbyGroups <- input$colorbyGroups
-                    selectedUpdate2()
-                    showGroups <- input$showGroups
-                    dimSelection <- dimSelection()
-                    rs <- rsUsed_d()
-                    req(rs)
-                    triggerRedraw()
-                    plotIdx <- if (plotIdxLocal == 6) activePlot() else plotIdxLocal
-                    pp1 <- somBasePlots[[plotIdx]]()
-                    projectionDf <- if (showGroups) projectionDfs[[plotIdx]]() else NULL
-
-                    pctl <- input$scatterPercentile
-                    if (is.null(pctl)) pctl <- 0.99
-                    tailP <- (1 - pctl) / 2
-                    somCodes <- metaD[[somCodesName]]
-                    dims <- dimSelection[[plotIdx]]$dims
-                    xlimP <- if (dims[1] %in% colnames(somCodes)) quantile(somCodes[, dims[1]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-                    ylimP <- if (dims[2] %in% colnames(somCodes)) quantile(somCodes[, dims[2]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-
-                    p3 <- somPlot(pp1, plotIdx, rs, colorbyGroups, showGroups,
-                                  dimSelection = dimSelection, sce = sce, metaD = metaD,
-                                  outputList = rv$outputList, projectionDf = projectionDf,
-                                  xlim = xlimP, ylim = ylimP
-                    )
-                    return(p3)
-                })
-            })
-        })
 
         dimRedSelection <- reactive({
             retVal <- input$dimRedSelection
@@ -1328,7 +1628,8 @@ clusterSelector <- function(sce, # main input has to contain:
         flowSOMPiePlot <- reactive({
             rs <- rsUsed()
             req(rs)
-            .buildFlowSOMPiePlot(metaD[[somCodesName]], rs, colsUsed)
+            ncol_val <- input$flowSOMPieCols          # NULL-safe: returns NULL before widget exists
+            .buildFlowSOMPiePlot(metaD[[somCodesName]], rs, colsUsed, ncol = ncol_val)
         })
 
         # flowSOMStars ----
@@ -1572,18 +1873,37 @@ clusterSelector <- function(sce, # main input has to contain:
                 dlSizeVar <- input$somSizeVar
                 if (is.null(dlColorVar)) dlColorVar <- "n"
                 if (is.null(dlSizeVar)) dlSizeVar <- "max"
-                for (plotIdx in seq_len(nPlots)) {
-                    message("printing somScatter", plotIdx)
-                    dims <- dimSelection[[plotIdx]]$dims
-                    pp1 <- plotSOMScatter(
-                        x = sce,
-                        chs = c(dims[1], dims[2]),
+               {
+                    message("printing somScatter (current dims)")
+                    dimSel   <- dimSelection()
+                    dlDimSel <- if (length(dimSel) >= 1L) dimSel else list(list(dims = activeDims()))
+                    dims     <- dlDimSel[[1L]]$dims
+
+                    pctl  <- input$scatterPercentile
+                    if (is.null(pctl)) pctl <- 0.99
+                    tailP    <- (1 - pctl) / 2
+                    somCodes <- metaD[[somCodesName]]
+
+                    dlColorVar <- input$somColorVar;  if (is.null(dlColorVar)) dlColorVar <- "n"
+                    dlSizeVar  <- input$somSizeVar;   if (is.null(dlSizeVar))  dlSizeVar  <- "max"
+
+                    pp1   <- plotSOMScatter(
+                        x         = sce,
+                        chs       = dims,
                         pointSize = dlSizeVar,
-                        color_by = dlColorVar, xRN = sceRN, xCN = sceCN
+                        color_by  = dlColorVar,
+                        xRN       = sceRN, xCN = sceCN
                     )
-                    xlimP <- if (dims[1] %in% colnames(somCodes)) quantile(somCodes[, dims[1]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-                    ylimP <- if (dims[2] %in% colnames(somCodes)) quantile(somCodes[, dims[2]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-                    print(ggsomPlot(pp1, plotIdx, rs, dimSelection, sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP))
+                    xlimP <- if (dims[1L] %in% colnames(somCodes))
+                        stats::quantile(somCodes[, dims[1L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
+                    else NULL
+                    ylimP <- if (dims[2L] %in% colnames(somCodes))
+                        stats::quantile(somCodes[, dims[2L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
+                    else NULL
+
+                    print(ggsomPlot(pp1, 1L, rs, dlDimSel,
+                                    sce = sce, metaD = metaD,
+                                    xlim = xlimP, ylim = ylimP))
                 }
                 message("printing tsnePlot")
                 print(tsnePlot())
@@ -1623,28 +1943,25 @@ clusterSelector <- function(sce, # main input has to contain:
             }
         )
 
-        # observer zoom dimSelection ----
-        dimSelection <- reactiveVal(list())
-        shiny::observe({
-            dimSelection <- list()
-            for (idx in seq_len(nPlots)) {
-                d1 <- input[[paste0("d", idx, ".1")]]
-                d2 <- input[[paste0("d", idx, ".2")]]
-                req(d1, d2)
-                lim1 <- channelLimits[[d1]]
-                lim2 <- channelLimits[[d2]]
-                req(lim1, lim2)
-                dimSelection[[idx]] <- list(
-                    dims = c(d1, d2),
-                    xlim = c(lim1["min"], lim1["max"]),
-                    ylim = c(lim2["min"], lim2["max"]),
-                    xzoom = c(NULL, NULL),
-                    yzoom = c(NULL, NULL)
-                )
-            }
-            dimSelection(dimSelection)
-        })
 
+        dimSelection <- shiny::reactiveVal(list())
+        shiny::observe({
+            dims <- activeDims()
+            shiny::req(dims[1L], dims[2L])
+            lim1 <- channelLimits[[dims[1L]]]
+            lim2 <- channelLimits[[dims[2L]]]
+            shiny::req(lim1, lim2)
+            # Preserve existing zoom when user only changes color/size, not dims
+            existing <- shiny::isolate(dimSelection())
+            if (length(existing) >= 1L && identical(existing[[1L]]$dims, dims)) return()
+            dimSelection(list(list(
+                dims  = dims,
+                xlim  = c(lim1["min"], lim1["max"]),
+                ylim  = c(lim2["min"], lim2["max"]),
+                xzoom = c(NULL, NULL),
+                yzoom = c(NULL, NULL)
+            )))
+        })
     }
 
 

@@ -1,3 +1,15 @@
+# CySA 0.99.8
+
+## User-interface improvements
+
+* Added hover-over tooltips (`title` attributes) to every non-obvious control
+  in the `clusterSelector()` sidebar and body panels.
+* Added inline `helpText()` explanations for subtle controls such as selection
+  mode, scatter auto-zoom percentile, and dimension-reduction settings.
+* Added selection hints to all plot outputs that support click/lasso
+  selection.
+* Extended roxygen comments for all UI builder helpers in `R/ui-helpers.R`.
+
 # CySA 0.99.7
 
 ## Bioconductor submission fixes

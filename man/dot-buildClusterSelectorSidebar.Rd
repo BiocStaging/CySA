@@ -4,21 +4,24 @@
 \alias{.buildClusterSelectorSidebar}
 \title{Build clusterSelector Sidebar UI}
 \usage{
-.buildClusterSelectorSidebar(sce, dList, outputList, nPlots)
+.buildClusterSelectorSidebar(sce, outputList, nPlots)
 }
 \arguments{
-\item{sce}{Full \code{SingleCellExperiment} for marker choices.}
-
-\item{dList}{List of marker pairs used to label the plot index selector.}
+\item{sce}{Full \code{SingleCellExperiment} for sample-id choices.}
 
 \item{outputList}{Named list of cluster groupings.}
 
-\item{nPlots}{Number of 2D SOM plots.}
+\item{nPlots}{Kept for API compatibility; no longer controls dim-UI layout.}
 }
 \value{
 A \code{shinydashboard::dashboardSidebar} UI object.
 }
 \description{
-Build clusterSelector Sidebar UI
+Constructs the left-hand control panel: selection mode, sample filter,
+scatter-plot auto-zoom, SOM 2D plot aesthetics, and group management.
+}
+\details{
+Axis controls have moved to the SOM 2D plots body box to avoid the
+selectize-dropdown overflow that occurs inside the narrow sidebar.
 }
 \keyword{internal}

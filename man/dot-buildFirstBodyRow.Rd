@@ -15,6 +15,8 @@
 A \code{shiny::fluidRow} object.
 }
 \description{
-Build the First Dashboard Body Row
+Top row of the dashboard: collapsible sample tree (optional), the main 2D
+scatter plot, and the interactive dendrogram. All three outputs support
+node/point selection.
 }
 \keyword{internal}

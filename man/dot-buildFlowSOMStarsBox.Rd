@@ -14,6 +14,8 @@
 A \code{shinydashboardPlus::box} UI object or \code{NULL}.
 }
 \description{
-Build FlowSOM Stars UI
+Interactive FlowSOM star plot. Each node shows marker expression as a star,
+background colour shows the metaclustering. Click or lasso nodes to select
+clusters.
 }
 \keyword{internal}

@@ -10,6 +10,7 @@
 A \code{shinydashboardPlus::box} UI object.
 }
 \description{
-Build SOM Raster UI
+Raster heatmap of SOM node marker expression plus a small interactive plot
+for selecting nodes from the SOM grid.
 }
 \keyword{internal}

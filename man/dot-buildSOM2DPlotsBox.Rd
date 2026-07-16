@@ -2,21 +2,27 @@
 % Please edit documentation in R/ui-helpers.R
 \name{.buildSOM2DPlotsBox}
 \alias{.buildSOM2DPlotsBox}
-\title{Build SOM 2D Plots UI}
+\title{Build SOM 2D Plot Box}
 \usage{
-.buildSOM2DPlotsBox(nPlots, colsUsed, outputList)
+.buildSOM2DPlotsBox(nPlots, colsUsed, outputList, markers, dList)
 }
 \arguments{
-\item{nPlots}{Number of 2D SOM plots to display.}
+\item{nPlots}{Kept for API compatibility.}
 
-\item{colsUsed}{Character vector of SOM column names used for dim red.}
+\item{colsUsed}{Character vector of SOM column names for dim-red selector.}
 
 \item{outputList}{Named list of cluster groupings.}
+
+\item{markers}{Character vector of all available markers (\code{rownames(sce)}).}
+
+\item{dList}{List of marker pairs used to populate the preset-pair picker.}
 }
 \value{
 A \code{shinydashboardPlus::box} UI object.
 }
 \description{
-Build SOM 2D Plots UI
+Main SOM visualisation panel: interactive axis controls, the primary 2D SOM
+plot, dimension-reduction controls, and t-SNE/UMAP/PCA projection plots.
+All plot outputs are selection-enabled.
 }
 \keyword{internal}
