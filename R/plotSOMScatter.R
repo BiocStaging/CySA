@@ -1,8 +1,3 @@
-# CySA: Interactive Cluster Selector for Cytometry Data.
-# Derived from the clusterSelector Shiny module originally developed in CyDa.
-# Refactored for Bioconductor with assistance from the opencode AI coding
-# assistant. All code is redistributed under the package LICENSE.
-
 #' @rdname plotScatter
 #' @title Scatter plot
 #'
@@ -25,217 +20,207 @@
 #'
 #' @return a \code{ggplot} object.
 #'
+#' @importFrom ggplot2 ggplot aes geom_point scale_color_gradientn
+#' @importFrom ggplot2 scale_color_manual facet_wrap facet_grid vars
+#' @importFrom ggplot2 guides guide_legend ylab theme_bw theme
+#' @importFrom ggplot2 element_blank element_text element_rect
+#' @importFrom grid unit
+#' @importFrom rlang sym .data
+#' @importFrom stats setNames
+#' @importFrom SummarizedExperiment assay assays colData
+#' @importFrom SingleCellExperiment int_colData
+#' @importFrom CATALYST channels cluster_codes cluster_ids
+#' @importFrom S4Vectors metadata
+#' @importFrom RColorBrewer brewer.pal
+#'
 #' @examples
 #' sce <- CySA_example_sce()
 #' plotSOMScatter(sce, chs = c("marker1", "marker2"))
 #'
 #' @export
 plotSOMScatter <- function(x, chs, metaSlot = "SOM_codes", pointSize = "n",
-                            color_by = "n",
-                            bins = 100, assay = "exprs", statsSlot = "SOM_stats",
-                            label = c("target", "channel", "both"),
-                            zeros = FALSE, k_pal = NULL,
-                            xRN = NULL, xCN = NULL) {
-    # check validity of input arguments
+                           color_by = "n",
+                           bins = 100, assay = "exprs", statsSlot = "SOM_stats",
+                           label = c("target", "channel", "both"),
+                           zeros = FALSE, k_pal = NULL,
+                           xRN = NULL, xCN = NULL) {
     label <- match.arg(label)
-    # Ensure pointSize and color_by are single values
     pointSize <- pointSize[1]
     color_by <- color_by[1]
-    args <- as.list(environment())
-    # CATALYST:::.check_args_plotScatter(args)
-    if (!metaSlot %in% names(S4Vectors::metadata(x))) {
-        stop("Need ", metaSlot, " in metadata of sce")
+
+    # ---- validate metadata slots ----
+    md <- S4Vectors::metadata(x)
+    if (!metaSlot %in% names(md)) {
+        stop("Need '", metaSlot, "' in metadata of x", call. = FALSE)
     }
-    if (!statsSlot %in% names(S4Vectors::metadata(x))) {
-        warning(statsSlot, " not found in metadata of sce - proceeding without stats")
+    som_codes <- md[[metaSlot]]
+
+    if (!is.null(statsSlot) && !statsSlot %in% names(md)) {
+        warning("'", statsSlot, "' not found in metadata of x; proceeding without stats")
         statsSlot <- NULL
     }
-    # 2do apply parallel
-    # compute stats if requested, this is time consuming
-    for (ch in chs) {
-        if (!ch %in% colnames(S4Vectors::metadata(x)[[metaSlot]])) {
-            warning("computing stats for ", ch, "\n")
-            mdt <- S4Vectors::metadata(x)[[metaSlot]]
-            # mdt[,ch] = 0
-            mdt <- cbind(mdt, matrix(0, nrow = nrow(mdt), ncol = 1))
-            colnames(mdt)[ncol(mdt)] <- ch
-            mdtt <- S4Vectors::metadata(x)
-            for (cl in as.integer(unique(colData(x)$cluster_id))) {
-                mdt[cl, ch] <- mean(assays(x)[[assay]][ch, which(colData(x)$cluster_id == cl)])
-            }
-            mdtt[[metaSlot]] <- mdt
-            S4Vectors::metadata(x) <- mdtt
-        }
+    if (!is.null(statsSlot)) {
+        stats <- md[[statsSlot]]
     }
-    # subset features to speed up matrix transpose  ‘
-    if (is.null(xRN)) {
-        xRN <- rownames(x)
-    }
-    if (is.null(xCN)) {
-        xCN <- CATALYST::channels(x)
-    }
-    i <- lapply(list(xRN, xCN), function(u) {
-        i <- match(chs, u, nomatch = 0)
-        if (all(i == 0)) NULL else i
-    })
-    i <- unlist(i)
 
-    # Check if requested channels exist in SOM_codes
-    som_codes <- S4Vectors::metadata(x)[[metaSlot]]
-    missing_chs <- setdiff(chs, colnames(som_codes))
-    if (length(missing_chs) > 0) {
+    # ---- resolve names ----
+    if (is.null(xRN)) xRN <- rownames(x)
+    if (is.null(xCN)) xCN <- CATALYST::channels(x)
+
+    # ---- validate channels ----
+    valid <- unique(c(colnames(som_codes), xRN, xCN))
+    missing <- setdiff(chs, valid)
+    if (length(missing) == length(chs)) {
         warning(
-            "Channels not found in SOM_codes: ", paste(missing_chs, collapse = ", "),
-            "\nAvailable: ", paste(colnames(som_codes), collapse = ", ")
+            "Unknown channels/markers: ", paste(missing, collapse = ", "),
+            "\nAvailable in SOM_codes: ", paste(colnames(som_codes), collapse = ", "),
+            call. = FALSE
         )
-        # Filter to only available channels
-        chs <- intersect(chs, colnames(som_codes))
-        if (length(chs) < 2) {
-            return(NULL) # Need at least 2 channels for scatter plot
+        return(NULL)
+    }
+    if (length(missing)) {
+        warning(
+            "Unknown channels/markers dropped: ", paste(missing, collapse = ", "),
+            call. = FALSE
+        )
+        chs <- setdiff(chs, missing)
+    }
+
+    # ---- ensure requested channels exist in SOM_codes (compute locally, do not mutate x) ----
+    y <- SummarizedExperiment::assay(x, assay)
+    assay_rows <- rownames(y)
+
+    missing_in_som <- setdiff(chs, colnames(som_codes))
+    if (length(missing_in_som)) {
+        for (ch in missing_in_som) {
+            if (!ch %in% assay_rows) {
+                stop(
+                    "Cannot compute SOM stats for '", ch,
+                    "': not found in assay rows.",
+                    call. = FALSE
+                )
+            }
+            warning("computing SOM stats for '", ch, "'")
+            cl_ids <- as.integer(unique(SummarizedExperiment::colData(x)$cluster_id))
+            vals <- vapply(cl_ids, function(cl) {
+                cells <- which(SummarizedExperiment::colData(x)$cluster_id == cl)
+                mean(y[ch, cells, drop = TRUE])
+            }, numeric(1))
+            som_codes <- cbind(som_codes, stats::setNames(vals, NULL))
+            colnames(som_codes)[ncol(som_codes)] <- ch
         }
     }
-    yy <- som_codes[, chs, drop = FALSE]
-    # y <- x[i, , drop = FALSE]
-    # y <- x[chs, , drop = FALSE] # this seems to be an expensive operation
-    # y <- assay(x, assay)
-    # y = y[chs, , drop = FALSE]
-    # rename features for visualization to
-    # include both channel name & description
-    nms <- switch(label,
-        target = xRN,
-        channel = xCN,
-        both = ifelse(xCN == xRN, xCN, paste(xCN, xRN, sep = "-"))
-    )
-    # chs[i != 0] <- rownames(y) <- nms[i]
 
-    # construct data.frame of specified assay data & all cell metadata
+    yy <- som_codes[, chs, drop = FALSE]
+
+    # ---- construct label names ----
+    nms <- switch(label,
+                  target = xRN,
+                  channel = xCN,
+                  both = ifelse(xCN == xRN, xCN, paste(xCN, xRN, sep = "-"))
+    )
+    # rename SOM-code columns for plotting
+    # (only rename those that correspond to rownames(x)/channels)
+    rename_map <- stats::setNames(nms, xRN)
+    found <- chs %in% names(rename_map)
+    colnames(yy)[found] <- rename_map[chs[found]]
+
+    # ---- add cluster color column if requested ----
     if (isTRUE(color_by %in% names(CATALYST::cluster_codes(x)))) {
         x[[color_by]] <- CATALYST::cluster_ids(x, color_by)
     }
-    cd <- cbind(SummarizedExperiment::colData(x), SingleCellExperiment::int_colData(x))
 
-
-    # df <- data.frame(
-    #   t(as.matrix(y)), cd,
-    #   check.names = FALSE,
-    #   stringsAsFactors = FALSE)
-    # cd_vars <- intersect(names(cd), names(df))
-
-
+    # ---- build data.frame ----
     if (!is.null(statsSlot)) {
-        stats <- S4Vectors::metadata(x)[[statsSlot]]
         df <- cbind(yy, stats)
     } else {
-        df <- yy
-        # Add a dummy n column for pointSize when stats are missing
+        df <- as.data.frame(yy)
         df$n <- 1
     }
-    # qualify rowSums to avoid ambiguity
-    if (!zeros) df <- df[Matrix::rowSums(df[, chs[c(1, 2)]] == 0) == 0, ]
-    # browser()
-    # initialize faceting & (optionally) melt data.frame
+
+    if (is.null(chs) || length(chs) < 2) {
+        stop("At least two channels are required for a scatter plot.", call. = FALSE)
+    }
+
+    # filter zero rows
+    if (!zeros) {
+        df <- df[rowSums(df[, chs[c(1, 2)], drop = FALSE] == 0) == 0, , drop = FALSE]
+    }
+
+    # ---- melt if >2 channels ----
     if (length(chs) > 2) {
-        # df <- melt(df, id.vars = unique(c(chs[1], cd_vars)))
-        if (!is.null(statsSlot)) {
-            df <- reshape2::melt(df, id.vars = unique(c(chs[1], colnames(stats))))
-        } else {
-            df <- reshape2::melt(df, id.vars = chs[1])
-        }
+        id_vars <- if (!is.null(statsSlot)) unique(c(chs[1], colnames(stats))) else chs[1]
+        df <- reshape2::melt(df, id.vars = id_vars)
         facet <- "variable"
-        ylab <- ylab(NULL)
+        ylab <- ggplot2::ylab(NULL)
         chs[2] <- "value"
     } else {
         facet <- NULL
         ylab <- NULL
     }
 
-    fill_var <- NULL
-    col_var <- sprintf("%s", color_by)
+    # ---- color/size setup ----
+    col_var <- if (color_by %in% colnames(df)) color_by else NULL
 
-    # Only use color_by if the column exists in the data frame
-    if (!col_var %in% colnames(df)) {
-        col_var <- NULL
-        fill_var <- NULL
-    }
-
-    # Only use pointSize if the column exists in the data frame
-    if (!pointSize %in% colnames(df)) {
-        pointSize <- "n"
-    }
-    if (!pointSize %in% colnames(df)) {
+    if (!pointSize %in% colnames(df)) pointSize <- NULL
+    if (!is.null(pointSize) && pointSize == "n" && !"n" %in% colnames(df)) {
         pointSize <- NULL
     }
 
-    geom <- geom_point(alpha = 0.2, na.rm = TRUE)
+    geom <- ggplot2::geom_point(alpha = 0.2, na.rm = TRUE)
     guides <- NULL
     scales <- NULL
 
-    if (!is.null(col_var) && col_var %in% colnames(df) && is.numeric(df[[col_var]])) {
-        # Continuous color scale - don't set guides to avoid conflict
-        scales <- scale_color_gradientn(
+    if (!is.null(col_var) && is.numeric(df[[col_var]])) {
+        scales <- ggplot2::scale_color_gradientn(
             colors = c("navy", rev(RColorBrewer::brewer.pal(11, "Spectral"))),
             guide = "colorbar"
         )
     } else if (!is.null(col_var) && col_var %in% names(CATALYST::cluster_codes(x))) {
         if (is.null(k_pal)) k_pal <- CySA_default_cluster_cols()
-        scales <- scale_color_manual(values = k_pal)
-        guides <- guides(col = guide_legend(
+        scales <- ggplot2::scale_color_manual(values = k_pal)
+        guides <- ggplot2::guides(col = ggplot2::guide_legend(
             override.aes = list(alpha = 1, size = 3)
         ))
     }
 
-    # facet <- c(facet, facet_by)
-    # if (!is.null(facet)) {
-    #   if (length(facet) == 1) {
-    #     facet <- facet_wrap(facet)
-    #   } else {
-    #     facet <- facet_grid(
-    #       cols = vars(!!sym(facet[1])),
-    #       rows = vars(!!sym(facet[2])))
-    #   }
-    # }
-    if (is.null(chs)) {
-        return(NULL)
+    # ---- facets ----
+    if (!is.null(facet)) {
+        if (length(facet) == 1) {
+            facet <- ggplot2::facet_wrap(ggplot2::vars(!!rlang::sym(facet)))
+        } else {
+            facet <- ggplot2::facet_grid(
+                cols = ggplot2::vars(!!rlang::sym(facet[1])),
+                rows = ggplot2::vars(!!rlang::sym(facet[2]))
+            )
+        }
     }
-    xy <- sprintf("%s", chs)
-    if (!zeros) df <- df[Matrix::rowSums(df[, chs[c(1, 2)]] == 0) == 0, ]
 
-    # Build aesthetic mapping with tidy evaluation.
+    # ---- filter zeros again after melting ----
+    if (!zeros) {
+        df <- df[rowSums(df[, chs[c(1, 2)], drop = FALSE] == 0) == 0, , drop = FALSE]
+    }
+
+    # ---- aesthetics ----
     aes_args <- list(
-        x = as.name(xy[1]),
-        y = as.name(xy[2]),
-        label = as.name("id"),
-        customdata = as.name("id")
+        x = rlang::sym(chs[1]),
+        y = rlang::sym(chs[2])
     )
-    if (pointSize %in% colnames(df)) {
-        aes_args$size <- as.name(pointSize)
-    }
-    if (!is.null(col_var) && col_var %in% colnames(df)) {
-        aes_args$colour <- as.name(col_var)
-    }
-    if (!is.null(fill_var) && fill_var %in% colnames(df)) {
-        aes_args$fill <- as.name(fill_var)
-    }
-    aes_list <- do.call(aes, aes_args)
+    if (!is.null(pointSize)) aes_args$size <- rlang::sym(pointSize)
+    if (!is.null(col_var)) aes_args$colour <- rlang::sym(col_var)
 
-    # Create plot
-    p1 <- ggplot(df, aes_list) + geom
+    p1 <- ggplot2::ggplot(df, do.call(ggplot2::aes, aes_args)) + geom
 
-    if (!is.null(scales)) {
-        p1 <- p1 + scales
-    }
-    if (!is.null(guides)) {
-        p1 <- p1 + guides
-    }
-    if (!is.null(ylab)) {
-        p1 <- p1 + ylab
-    }
-    p1 <- p1 + theme_bw() + theme(
+    if (!is.null(scales)) p1 <- p1 + scales
+    if (!is.null(guides)) p1 <- p1 + guides
+    if (!is.null(ylab)) p1 <- p1 + ylab
+    if (!is.null(facet)) p1 <- p1 + facet
+
+    p1 + ggplot2::theme_bw() + ggplot2::theme(
         aspect.ratio = 1,
-        panel.grid = element_blank(),
-        axis.text = element_text(color = "black"),
-        strip.background = element_rect(fill = "white"),
-        legend.key.height = unit(0.8, "lines")
+        panel.grid = ggplot2::element_blank(),
+        axis.text = ggplot2::element_text(color = "black"),
+        strip.background = ggplot2::element_rect(fill = "white"),
+        legend.key.height = grid::unit(0.8, "lines")
     )
-    p1
 }

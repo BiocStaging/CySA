@@ -61,6 +61,10 @@ prepClusterSelectorData <- function(sce,
                                     somCodesName = "SOM_codes",
                                     assay = "exprs",
                                     seed = 123) {
+    if (length(total_cells_to_sample) != 1 || !is.numeric(total_cells_to_sample) || total_cells_to_sample < 1) {
+        stop("'total_cells_to_sample' must be a positive scalar")
+    }
+
     if (is.null(dList)) {
         dList <- .defaultDList(sce)
     }

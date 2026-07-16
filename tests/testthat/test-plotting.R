@@ -7,15 +7,39 @@ test_that("plotSOMScatter() returns a ggplot object", {
 
 test_that("plotSOMScatter() handles missing channels gracefully", {
     sce <- CySA_example_sce()
-    p <- plotSOMScatter(sce, chs = c("missing_marker", "marker1"))
 
-    expect_true(is.null(p) || inherits(p, "ggplot"))
+    expect_warning(
+        p <- plotSOMScatter(sce, chs = c("missing_marker", "marker1", "marker2")),
+        "Unknown channels/markers"
+    )
+    expect_s3_class(p, "ggplot")
 })
 
-test_that("plotScatterBJ() returns a ggplot object", {
+test_that("plotSOMScatter() works with more than two channels", {
     sce <- CySA_example_sce()
-    p <- plotScatterBJ(sce, chs = c("marker1", "marker2"))
+    p <- plotSOMScatter(sce, chs = c("marker1", "marker2", "marker3", "marker4"))
+    expect_s3_class(p, "ggplot")
+})
 
+test_that("plotCytoScatter() returns a ggplot object", {
+    sce <- CySA_example_sce()
+    p <- plotCytoScatter(x = sce, chs = c("marker1", "marker2"))
+
+    expect_s3_class(p, "ggplot")
+})
+
+test_that("plotCytoScatter() errors on unknown channels", {
+    sce <- CySA_example_sce()
+    expect_error(
+        plotCytoScatter(x = sce, chs = c("not_a_marker", "marker1")),
+        "Unknown channels/markers"
+    )
+})
+
+test_that("plotCytoScatter() respects facet_by when supplied", {
+    sce <- CySA_example_sce()
+    sce$group <- sample(c("A", "B"), ncol(sce), replace = TRUE)
+    p <- plotCytoScatter(x = sce, chs = c("marker1", "marker2"), facet_by = "group")
     expect_s3_class(p, "ggplot")
 })
 
@@ -42,4 +66,13 @@ test_that("plot-helpers build expected plot objects", {
 
     p_select <- .buildSOMRasterSelectPlot(somRasterData, rs = c(1, 2))
     expect_s3_class(p_select, "ggplot")
+})
+
+test_that(".buildFlowSOMPiePlot() returns NULL for invalid rs", {
+    sce <- CySA_example_sce()
+    som_codes <- S4Vectors::metadata(sce)$SOM_codes
+    colsUsed <- S4Vectors::metadata(sce)$map$colsUsed
+
+    expect_null(.buildFlowSOMPiePlot(som_codes, rs = integer(0), colsUsed))
+    expect_null(.buildFlowSOMPiePlot(som_codes, rs = 9999, colsUsed))
 })

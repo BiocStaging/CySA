@@ -26,3 +26,4 @@
 ^CySA_.*\.tar\.gz$
 ^.Rhistory$
 ^Julia.*$
+^inst/dev$

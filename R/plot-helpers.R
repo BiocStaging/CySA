@@ -56,6 +56,7 @@
 #' @keywords internal
 .buildFlowSOMPiePlot <- function(somCodes, rs, colsUsed) {
     rs <- as.integer(rs)
+    rs <- rs[!is.na(rs)]
     if (length(rs) < 1 || any(rs <= 0) || any(rs > nrow(somCodes))) {
         return(NULL)
     }
@@ -105,21 +106,33 @@
 #'
 #' @keywords internal
 .buildSOMRasterSelectPlot <- function(somRasterData, rs) {
-    n_rows <- max(somRasterData$x)
-    n_cols <- max(somRasterData$y)
-    data.points <- expand.grid(seq_len(n_rows), seq_len(n_cols))
-    colnames(data.points) <- c("x", "y")
+    # somRasterData already contains one row per SOM node with its correct
+    # (x, y) grid position.  Rebuilding via expand.grid() produces only
+    # max(x) * max(y) rows — far fewer than the actual node count.
+    data.points <- somRasterData[, c("x", "y", "id"), drop = FALSE]
 
-    ggplot(data.points, aes(x = x, y = y, customdata = seq_len(nrow(data.points)))) +
-        geom_point() +
-        geom_point(
-            data = data.points[rs, , drop = FALSE],
-            aes(x = x, y = y),
-            color = "red",
-            size = 0.9
+    rs_valid <- as.integer(unlist(rs))
+    rs_valid <- rs_valid[!is.na(rs_valid) & rs_valid %in% data.points$id]
+
+    selected <- if (length(rs_valid) > 0L) {
+        data.points[data.points$id %in% rs_valid, , drop = FALSE]
+    } else {
+        data.points[0L, , drop = FALSE]
+    }
+
+    ggplot2::ggplot(
+        data.points,
+        ggplot2::aes(x = x, y = y, key = id)   # key is preserved by ggplotly → d$key
+    ) +
+        ggplot2::geom_point() +
+        ggplot2::geom_point(
+            data        = selected,
+            ggplot2::aes(x = x, y = y),
+            color       = "red",
+            size        = 0.9,
+            inherit.aes = FALSE
         )
 }
-
 
 #' Compute Percentile Axis Limits for Scatter Plots
 #'

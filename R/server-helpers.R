@@ -111,3 +111,46 @@
     }
     outputList
 }
+
+# inputSelect = function ----
+.inputSelect <- function(d, rs, mode) {
+    if (is.null(rs)) return(integer(0))
+    if (is.null(d))  return(as.integer(rs))
+
+    node_ids <- NULL
+
+    if (is.data.frame(d)) {
+        if ("key" %in% names(d) && length(d$key) > 0L && !all(is.na(d$key))) {
+            # ggplotly key aesthetic — works across all color-group traces
+            node_ids <- as.integer(unlist(d$key))
+
+        } else if ("customdata" %in% names(d) && !all(is.na(d$customdata))) {
+            # injected via plotly::style() on SOM/dend plots
+            node_ids <- as.integer(unlist(d$customdata))
+
+        } else if ("pointNumber" %in% names(d)) {
+            # last resort: row-order encoding, only valid when data is node-ordered
+            # filter to curveNumber == 0 (the all-nodes base layer)
+            if ("curveNumber" %in% names(d)) {
+                d <- d[d$curveNumber == 0L, , drop = FALSE]
+                if (nrow(d) == 0L) return(as.integer(rs))
+            }
+            node_ids <- as.integer(unlist(d$pointNumber)) + 1L
+        }
+    } else {
+        node_ids <- suppressWarnings(as.integer(unlist(d)))
+    }
+
+    if (is.null(node_ids)) return(as.integer(rs))
+    node_ids <- node_ids[!is.na(node_ids) & node_ids > 0L]
+    if (length(node_ids) == 0L) return(as.integer(rs))
+
+    as.integer(switch(EXPR = mode,
+                      "remove others" = intersect(node_ids, rs),
+                      "add"           = unique(c(rs, node_ids)),
+                      "remove"        = setdiff(rs, node_ids),
+                      node_ids
+    ))
+}
+
+

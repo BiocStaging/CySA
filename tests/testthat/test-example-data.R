@@ -22,3 +22,10 @@ test_that("CySA_example_sce() respects n_cells and n_nodes", {
     expect_equal(nrow(S4Vectors::metadata(sce)$SOM_codes), 10)
     expect_equal(nrow(SummarizedExperiment::assay(sce, "exprs")), 8)
 })
+
+test_that("CySA_default_cluster_cols() returns a non-empty character vector", {
+    cols <- CySA_default_cluster_cols()
+    expect_type(cols, "character")
+    expect_true(length(cols) >= 1)
+    expect_true(all(grepl("^#", cols)))
+})

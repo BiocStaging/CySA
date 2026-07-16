@@ -51,3 +51,15 @@ test_that("prepClusterSelectorData() is reproducible with seed", {
         SingleCellExperiment::colData(prepped2$sce_subsampled)$id
     )
 })
+
+test_that("prepClusterSelectorData() rejects invalid total_cells_to_sample", {
+    sce <- CySA_example_sce(n_cells = 100, n_nodes = 10)
+    expect_error(
+        prepClusterSelectorData(sce, total_cells_to_sample = -1),
+        "must be a positive scalar"
+    )
+    expect_error(
+        prepClusterSelectorData(sce, total_cells_to_sample = "many"),
+        "must be a positive scalar"
+    )
+})

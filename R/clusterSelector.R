@@ -128,9 +128,16 @@ clusterSelector <- function(sce, # main input has to contain:
     }
     outputList <- .initializeOutputList(outputList, levels(sce$cluster_id))
     colsUsed <- metaD$map$colsUsed
-    somRasterData <- somRasterData[, c("x", "y", colsUsed)]
+    keepCols <- intersect(c("x", "y", "id", colsUsed), colnames(somRasterData))
+    somRasterData <- somRasterData[, keepCols]
     if (!is.null(somRasterObj)) {
-        somRasterObj <- somRasterObj[[colsUsed]]
+        if (inherits(somRasterObj, c("RasterBrick", "RasterStack"))) {
+            somRasterObj <- raster::subset(somRasterObj, colsUsed)
+        } else if (is.array(somRasterObj)) {
+            # Subset array layers by name
+            layer_idx <- which(dimnames(somRasterObj)[[3]] %in% colsUsed)
+            somRasterObj <- somRasterObj[, , layer_idx, drop = FALSE]
+        }
     }
 
     # Pre-build the SOM raster heatmap as a ggplot object once.
@@ -170,326 +177,285 @@ clusterSelector <- function(sce, # main input has to contain:
     )
 
     #  server  ----
-        server <- function(input, output, session) {
-            rsUsed <- reactiveVal(c(1))
-            triggerRedraw <- reactiveVal(1)
-            selectedPoints <- reactiveVal(NULL)
-            activePlot <- reactiveVal(1)
-            df <- as.data.frame(t(assays(sce_subsampled)[[1]]))
-            colnames(df) <- make.names(rownames(sce_subsampled))
-            dfPlot <- shiny::reactiveVal(df)
-            # dfall = data.frame(t(assays(sce)[[1]]))
-            # rN = rownames(sce)
-            metaD <- S4Vectors::metadata(sce)
-            rN <- colnames(metaD[[somCodesName]])
-            nNsub <- colnames(S4Vectors::metadata(sce_subsampled)[[somCodesName]])
-            rownames(sce_subsampled)
-            sce_subsampledRN <- rownames(sce_subsampled)
-            sceRN <- rownames(sce)
-            sceCN <- colnames(sce)
-            chx <- channels(sce)
-            if (!is.null("colTree")) {
-                output$plot <- collapsibleTree::renderCollapsibleTree({
-                    colTree
-                })
+    server <- function(input, output, session) {
+        rsUsed <- reactiveVal(c(1))
+        triggerRedraw <- reactiveVal(1)
+        selectedPoints <- reactiveVal(NULL)
+        activePlot <- reactiveVal(1)
+        df <- as.data.frame(t(assays(sce_subsampled)[[1]]))
+        colnames(df) <- make.names(rownames(sce_subsampled))
+        dfPlot <- shiny::reactiveVal(df)
+        # dfall = data.frame(t(assays(sce)[[1]]))
+        # rN = rownames(sce)
+        metaD <- S4Vectors::metadata(sce)
+        rN <- colnames(metaD[[somCodesName]])
+        nNsub <- colnames(S4Vectors::metadata(sce_subsampled)[[somCodesName]])
+        rownames(sce_subsampled)
+        sce_subsampledRN <- rownames(sce_subsampled)
+        sceRN <- rownames(sce)
+        sceCN <- colnames(sce)
+        chx <- channels(sce)
+        if (!is.null("colTree")) {
+            output$plot <- collapsibleTree::renderCollapsibleTree({
+                colTree
+            })
+        }
+
+        # force redraw if selected group is used
+        selectedUpdate2 <- reactiveVal(value = 0)
+
+        # reactiveValues replacement for external env$outputList
+        rv <- reactiveValues(outputList = outputList)
+
+        # Keep external env in sync for callers that still read env$outputList
+        shiny::observe({
+            assign(x = "outputList", value = rv$outputList, envir = env)
+        })
+
+        shiny::observe({
+            rs <- rsUsed_d()
+            if ("selected" %in% input$colorbyGroups) {
+                isolate(selectedUpdate2(selectedUpdate2() + 1))
             }
+        })
 
-            # force redraw if selected group is used
-            selectedUpdate2 <- reactiveVal(value = 0)
+        # dim UI ----
+        #
 
-            # reactiveValues replacement for external env$outputList
-            rv <- reactiveValues(outputList = outputList)
+        choicesRV <- reactiveValues(trigger = 1)
 
-            # Keep external env in sync for callers that still read env$outputList
-            shiny::observe({
-                assign(x = "outputList", value = rv$outputList, envir = env)
-            })
+        observe({
+            choicesRV$trigger
+        })
 
-            shiny::observe({
-                rs <- rsUsed_d()
-                if ("selected" %in% input$colorbyGroups) {
-                    isolate(selectedUpdate2(selectedUpdate2() + 1))
-                }
-            })
-
-            # dim UI ----
-            #
-
-            choicesRV <- reactiveValues(trigger = 1)
-
-            observe({
-                choicesRV$trigger
-            })
-
-            output$dimUI <- renderUI({
-                triggered <- choicesRV$trigger
-                if (!is.null(triggered)) {
-                }
-                tagsX <- list()
-                if (!base::exists("d1.1")) { # lets assume that if one is set all are set
-                    ridx <- 1
-                    for (idx in seq_len(nPlots)) {
-                        assign(paste0("d", idx, ".1"), rownames(sce)[ridx])
-                        ridx <- ridx + 1
-                        assign(paste0("d", idx, ".2"), rownames(sce)[ridx])
-                        ridx <- ridx + 1
-                    }
-                }
-                for (idx in seq_len(nPlots)) {
-                    tagsX[[length(tagsX) + 1]] <- fluidRow(
-                        style = "margin-left: 0; margin-right: 0;",
-                        column(
-                            width = 6, style = "padding-left: 2px; padding-right: 2px;",
-                            selectInput(paste0("d", idx, ".1"),
-                                paste0("X", idx),
-                                choices = rownames(sce),
-                                selected = get(paste0("d", idx, ".1")),
-                                multiple = FALSE, selectize = TRUE, width = "100%"
-                            )
-                        ),
-                        column(
-                            width = 6, style = "padding-left: 2px; padding-right: 2px;",
-                            selectInput(
-                                inputId = paste0("d", idx, ".2"),
-                                label = paste0("Y", idx),
-                                choices = rownames(sce),
-                                selected = get(paste0("d", idx, ".2")),
-                                multiple = FALSE, selectize = TRUE, width = "100%"
-                            )
-                        )
-                    )
-                }
-
-                tagList(tagsX)
-            })
-
-
-            shiny::observeEvent(input$applyDimSelection, {
-
-                inputList <- input$d2Axes
-                newVals <- lapply(inputList[seq_len(min(6, length(inputList)))], FUN = function(x) str_split(string = x, pattern = " - ")) %>% unlist()
+        output$dimUI <- renderUI({
+            triggered <- choicesRV$trigger
+            if (!is.null(triggered)) {
+            }
+            tagsX <- list()
+            if (!base::exists("d1.1")) { # lets assume that if one is set all are set
                 ridx <- 1
                 for (idx in seq_len(nPlots)) {
-                    assign(paste0("d", idx, ".1"), newVals[ridx])
+                    assign(paste0("d", idx, ".1"), rownames(sce)[ridx])
                     ridx <- ridx + 1
-                    assign(paste0("d", idx, ".2"), newVals[ridx])
+                    assign(paste0("d", idx, ".2"), rownames(sce)[ridx])
                     ridx <- ridx + 1
                 }
-                for (idx in seq_len(nPlots)) {
-                    updateSelectInput(
-                        session = session,
-                        inputId = paste0("d", idx, ".1"),
-                        selected = get(paste0("d", idx, ".1")),
+            }
+            for (idx in seq_len(nPlots)) {
+                tagsX[[length(tagsX) + 1]] <- fluidRow(
+                    style = "margin-left: 0; margin-right: 0;",
+                    column(
+                        width = 6, style = "padding-left: 2px; padding-right: 2px;",
+                        selectInput(paste0("d", idx, ".1"),
+                                    paste0("X", idx),
+                                    choices = rownames(sce),
+                                    selected = get(paste0("d", idx, ".1")),
+                                    multiple = FALSE, selectize = TRUE, width = "100%"
+                        )
+                    ),
+                    column(
+                        width = 6, style = "padding-left: 2px; padding-right: 2px;",
+                        selectInput(
+                            inputId = paste0("d", idx, ".2"),
+                            label = paste0("Y", idx),
+                            choices = rownames(sce),
+                            selected = get(paste0("d", idx, ".2")),
+                            multiple = FALSE, selectize = TRUE, width = "100%"
+                        )
                     )
-                    updateSelectInput(
-                        session = session,
-                        inputId = paste0("d", idx, ".2"),
-                        selected = get(paste0("d", idx, ".2")),
-                    )
-                }
-                choicesRV$trigger <- choicesRV$trigger + 1
-            })
-
-
-            # update Radio buttons d2Axes1 ----
-            # lapply(seq_len(nPlots), function(x){
-            #   shiny::observeEvent(input[[paste0("d",x,".2")]],{
-            #     choices = list()
-            #     for(idx in seq_len(nPlots)){
-            #       if(input[[paste0("d", idx, ".1")]] %in% rnSCE ){
-            #         # choices[[length(choices) + 1]] = paste0(input[[paste0("d", idx, ".1")]], "/", input[[paste0("d", idx, ".2")]])
-            #         choices[[paste0(input[[paste0("d", idx, ".1")]], "/", input[[paste0("d", idx, ".2")]])]] = idx
-            #       }
-            #
-            #     }
-            #
-            #     oldVal = input$d2Axes1
-            #     updateRadioButtons(inputId = "d2Axes1", choices = choices, selected = oldVal)
-            #   })
-            # })
-
-            # UI Choose a plot index ----
-            output$axesUI <- renderUI({
-                if (is.null(input[[paste0("d", idx, ".1")]])) {
-                    return(NULL)
-                }
-                choices <- list()
-                for (idx in seq_len(nPlots)) {
-                    if (input[[paste0("d", idx, ".1")]] %in% rnSCE) {
-                        choices[[paste0(input[[paste0("d", idx, ".1")]], "/", input[[paste0("d", idx, ".2")]])]] <- idx
-                    }
-                }
-                # browser()
-                radioButtons("d2Axes1",
-                    "Choose a plot index :",
-                    choices = choices,
-                    selected = 1,
-                    inline = FALSE
                 )
-            })
-
-            # observe clusterNameSelect ----
-            # print clusters based on selection
-            shiny::observeEvent(input$clusterNameSelect, {
-                outputList <- rv$outputList
-                listNames <- names(outputList) %in% input$clusterNameSelect
-                combinedSoms <- outputList[listNames] %>%
-                    unlist() %>%
-                    unique()
-                updateTextInput(session, "clusterNumbers", value = paste(combinedSoms, collapse = ", "))
-            })
-
-            # observeEvent groupsVar ----
-            shiny::observeEvent(input$groupsVar, {
-                # browser()
-                groupsVar <- input$groupsVar
-                if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
-                    return(NULL)
-                }
-                levs <- levels(metaD$experiment_info[, input$groupsVar])
-                updateSelectInput(session = session, inputId = "group1", choices = levs)
-                updateSelectInput(session = session, inputId = "group2", choices = levs)
-            })
-
-            # observe group ----
-            shiny::observe({
-                if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
-                    return(NULL)
-                }
-                levs <- levels(metaD$experiment_info[, input$groupsVar])
-                grp1 <- input$group1
-                grp2 <- isolate(input$group2)
-                levs <- levs[!levs %in% grp1]
-                updateSelectInput(session = session, inputId = "group2", choices = levs, selected = grp2)
-                # save(file = "dev2.RData", list = c("groupsVar", "levs", "grp1"))
-                #
-            })
-            shiny::observe({
-                if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
-                    return(NULL)
-                }
-                levs <- levels(metaD$experiment_info[, input$groupsVar])
-                grp2 <- input$group2
-                grp1 <- isolate(input$group1)
-                levs <- levs[!levs %in% grp2]
-                updateSelectInput(session = session, inputId = "group1", choices = levs, selected = grp1)
-                # save(file = "dev2.RData", list = c("groupsVar", "levs", "grp1"))
-                #
-            })
-            # delayed group input for t-test ----
-            # returns sample_ids from potentially other metadata factorials
-            groupsInput <- reactive({
-                if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
-                    return(NULL)
-                }
-                grp1 <- metaD$experiment_info[
-                    metaD$experiment_info[, input$groupsVar] %in% input$group1, "sample_id"
-                ]
-                grp2 <- metaD$experiment_info[
-                    metaD$experiment_info[, input$groupsVar] %in% input$group2, "sample_id"
-                ]
-                list(group1 = grp1, group2 = grp2)
-            }) %>% debounce(1000)
-
-            # t.test ----
-            shiny::observe({
-                empty <- FALSE
-                groupsVar <- input$groupsVar
-                if (!input$groupsVar %in% colnames(metaD$experiment_info)) empty <- TRUE
-                grpInp <- groupsInput()
-                if (is_empty(grpInp)) empty <- TRUE
-                if (any(lapply(grpInp, is_empty) %>% unlist())) empty <- TRUE
-                rs <- rsUsed()
-                req(rs)
-                relativeToCol <- input$relativeTo
-                numCols <- unlist(lapply(metaD$experiment_info, is.numeric), use.names = FALSE)
-                expInfo <- metaD$experiment_info[, numCols, drop = FALSE]
-                rownames(expInfo) <- metaD$experiment_info$sample_id
-                outputList <- rv$outputList
-
-                if (length(rs) < 1) empty <- TRUE
-                if (empty) {
-                    output$ttestResult <- shiny::renderPrint("no data")
-                    return(NULL)
-                }
-                if (relativeToCol == "none") {
-                    rSums <- rep(1, nrow(clusterPatientTable))
-                } else {
-                    rSums <- .computeRelativeCounts(
-                        clusterPatientTable, rs, relativeToCol, expInfo, outputList
-                    ) / 100
-                    rSums <- rSums[rownames(clusterPatientTable)]
-                }
-                names(rSums) <- rownames(clusterPatientTable)
-                cD <- SingleCellExperiment::colData(sce)
-                cD <- cD[cD$cluster_id %in% rs, ]
-                cellCounts <- cD %>%
-                    as_tibble() %>%
-                    group_by(sample_id) %>%
-                    count()
-                x <- cellCounts %>%
-                    filter(sample_id %in% grpInp$group1) %>%
-                    ungroup()
-                x$rsums <- rSums[x$sample_id]
-                x$val <- x$n / x$rsums
-                x <- x %>% pull(val)
-                y <- cellCounts %>%
-                    filter(sample_id %in% grpInp$group2) %>%
-                    ungroup()
-                y$rsums <- rSums[y$sample_id]
-                y$val <- y$n / y$rsums
-                y <- y %>% pull(val)
-                shiny::req(x)
-                shiny::req(y)
-                if (sd(x) == 0 & sd(y) == 0) {
-                    output$ttestResult <- shiny::renderPrint("not enough data")
-                    return(NULL)
-                }
-                tt <- stats::t.test(x, y)
-                output$ttestResult <- shiny::renderPrint(tt)
-            })
-
-            # updatedoutputList function ----
-            updatedoutputList <- function() {
-                .updateOutputListInputs(session, input, rv$outputList, metaD)
             }
 
-            # observe applyclusterNumbers ---
-            shiny::observeEvent(input$applyclusterNumbers, {
-                outputList <- rv$outputList
-                # isolate(input$clusterNumbers)
-                updatedoutputList()
-            })
+            tagList(tagsX)
+        })
 
-            # obs rmGrp ----
-            shiny::observeEvent(input$rmGrp, {
-                outputList <- rv$outputList
-                cName <- input$clusterNameRM
-                cList <- inputClusterNumber()
-                if (cName %in% names(outputList)) {
-                    outputList[[cName]] <- NULL
-                    outputList[["Rest"]] <- c()
-                    used <- unique(unlist(outputList))
-                    all_levels <- levels(sce$cluster_id)
-                    outputList[["Rest"]] <- as.integer(all_levels[!all_levels %in% used])
-                    for (na in names(outputList)) {
-                        if (length(outputList[[na]]) == 0) outputList[[na]] <- NULL
-                    }
-                    # outputList = append(outputList, list(cList ))
-                    # names(outputList)[length(outputList)] = cName
-                    rv$outputList <- outputList
-                    updatedoutputList()
+
+        shiny::observeEvent(input$applyDimSelection, {
+
+            inputList <- input$d2Axes
+            newVals <- lapply(inputList[seq_len(min(6, length(inputList)))], FUN = function(x) str_split(string = x, pattern = " - ")) %>% unlist()
+            ridx <- 1
+            for (idx in seq_len(nPlots)) {
+                assign(paste0("d", idx, ".1"), newVals[ridx])
+                ridx <- ridx + 1
+                assign(paste0("d", idx, ".2"), newVals[ridx])
+                ridx <- ridx + 1
+            }
+            for (idx in seq_len(nPlots)) {
+                updateSelectInput(
+                    session = session,
+                    inputId = paste0("d", idx, ".1"),
+                    selected = get(paste0("d", idx, ".1")),
+                )
+                updateSelectInput(
+                    session = session,
+                    inputId = paste0("d", idx, ".2"),
+                    selected = get(paste0("d", idx, ".2")),
+                )
+            }
+            choicesRV$trigger <- choicesRV$trigger + 1
+        })
+
+        # UI Choose a plot index ----
+        output$axesUI <- renderUI({
+            if (is.null(input[["d1.1"]])) return(NULL)
+
+            choices <- list()
+            for (idx in seq_len(nPlots)) {
+                if (input[[paste0("d", idx, ".1")]] %in% rnSCE) {
+                    choices[[paste0(input[[paste0("d", idx, ".1")]], "/", input[[paste0("d", idx, ".2")]])]] <- idx
                 }
-            })
+            }
+            # browser()
+            radioButtons("d2Axes1",
+                         "Choose a plot index :",
+                         choices = choices,
+                         selected = 1,
+                         inline = FALSE
+            )
+        })
 
+        # observe clusterNameSelect ----
+        # print clusters based on selection
+        shiny::observeEvent(input$clusterNameSelect, {
+            outputList <- rv$outputList
+            listNames <- names(outputList) %in% input$clusterNameSelect
+            combinedSoms <- outputList[listNames] %>%
+                unlist() %>%
+                unique()
+            updateTextInput(session, "clusterNumbers", value = paste(combinedSoms, collapse = ", "))
+        })
 
-            # obs applyName ----
-            shiny::observeEvent(input$applyName, {
-                outputList <- rv$outputList
-                cName <- input$clusterName
-                cList <- inputClusterNumber()
-                outputList <- rv$outputList
-                outputList[[cName]] <- cList
+        # observeEvent groupsVar ----
+        shiny::observeEvent(input$groupsVar, {
+            # browser()
+            groupsVar <- input$groupsVar
+            if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
+                return(NULL)
+            }
+            levs <- levels(metaD$experiment_info[, input$groupsVar])
+            updateSelectInput(session = session, inputId = "group1", choices = levs)
+            updateSelectInput(session = session, inputId = "group2", choices = levs)
+        })
+
+        # observe group ----
+        shiny::observe({
+            if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
+                return(NULL)
+            }
+            levs <- levels(metaD$experiment_info[, input$groupsVar])
+            grp1 <- input$group1
+            grp2 <- isolate(input$group2)
+            levs <- levs[!levs %in% grp1]
+            updateSelectInput(session = session, inputId = "group2", choices = levs, selected = grp2)
+            # save(file = "dev2.RData", list = c("groupsVar", "levs", "grp1"))
+            #
+        })
+        shiny::observe({
+            if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
+                return(NULL)
+            }
+            levs <- levels(metaD$experiment_info[, input$groupsVar])
+            grp2 <- input$group2
+            grp1 <- isolate(input$group1)
+            levs <- levs[!levs %in% grp2]
+            updateSelectInput(session = session, inputId = "group1", choices = levs, selected = grp1)
+            # save(file = "dev2.RData", list = c("groupsVar", "levs", "grp1"))
+            #
+        })
+        # delayed group input for t-test ----
+        # returns sample_ids from potentially other metadata factorials
+        groupsInput <- reactive({
+            if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
+                return(NULL)
+            }
+            grp1 <- metaD$experiment_info[
+                metaD$experiment_info[, input$groupsVar] %in% input$group1, "sample_id"
+            ]
+            grp2 <- metaD$experiment_info[
+                metaD$experiment_info[, input$groupsVar] %in% input$group2, "sample_id"
+            ]
+            list(group1 = grp1, group2 = grp2)
+        }) %>% debounce(1000)
+
+        # t.test ----
+        shiny::observe({
+            empty <- FALSE
+            groupsVar <- input$groupsVar
+            if (!input$groupsVar %in% colnames(metaD$experiment_info)) empty <- TRUE
+            grpInp <- groupsInput()
+            if (is_empty(grpInp)) empty <- TRUE
+            if (any(lapply(grpInp, is_empty) %>% unlist())) empty <- TRUE
+            rs <- rsUsed()
+            req(rs)
+            relativeToCol <- input$relativeTo
+            numCols <- unlist(lapply(metaD$experiment_info, is.numeric), use.names = FALSE)
+            expInfo <- metaD$experiment_info[, numCols, drop = FALSE]
+            rownames(expInfo) <- metaD$experiment_info$sample_id
+            outputList <- rv$outputList
+
+            if (length(rs) < 1) empty <- TRUE
+            if (empty) {
+                output$ttestResult <- shiny::renderPrint("no data")
+                return(NULL)
+            }
+            if (relativeToCol == "none") {
+                rSums <- rep(1, nrow(clusterPatientTable))
+            } else {
+                rSums <- .computeRelativeCounts(
+                    clusterPatientTable, rs, relativeToCol, expInfo, outputList
+                ) / 100
+                rSums <- rSums[rownames(clusterPatientTable)]
+            }
+            names(rSums) <- rownames(clusterPatientTable)
+            cD <- SingleCellExperiment::colData(sce)
+            cD <- cD[cD$cluster_id %in% rs, ]
+            cellCounts <- cD %>%
+                as_tibble() %>%
+                group_by(sample_id) %>%
+                count()
+            x <- cellCounts %>%
+                filter(sample_id %in% grpInp$group1) %>%
+                ungroup()
+            x$rsums <- rSums[x$sample_id]
+            x$val <- x$n / x$rsums
+            x <- x %>% pull(val)
+            y <- cellCounts %>%
+                filter(sample_id %in% grpInp$group2) %>%
+                ungroup()
+            y$rsums <- rSums[y$sample_id]
+            y$val <- y$n / y$rsums
+            y <- y %>% pull(val)
+            shiny::req(x)
+            shiny::req(y)
+            if (sd(x) == 0 & sd(y) == 0) {
+                output$ttestResult <- shiny::renderPrint("not enough data")
+                return(NULL)
+            }
+            tt <- stats::t.test(x, y)
+            output$ttestResult <- shiny::renderPrint(tt)
+        })
+
+        # updatedoutputList function ----
+        updatedoutputList <- function() {
+            .updateOutputListInputs(session, input, rv$outputList, metaD)
+        }
+
+        # observe applyclusterNumbers ---
+        shiny::observeEvent(input$applyclusterNumbers, {
+            outputList <- rv$outputList
+            # isolate(input$clusterNumbers)
+            updatedoutputList()
+        })
+
+        # obs rmGrp ----
+        shiny::observeEvent(input$rmGrp, {
+            outputList <- rv$outputList
+            cName <- input$clusterNameRM
+            cList <- inputClusterNumber()
+            if (cName %in% names(outputList)) {
+                outputList[[cName]] <- NULL
                 outputList[["Rest"]] <- c()
                 used <- unique(unlist(outputList))
                 all_levels <- levels(sce$cluster_id)
@@ -497,91 +463,905 @@ clusterSelector <- function(sce, # main input has to contain:
                 for (na in names(outputList)) {
                     if (length(outputList[[na]]) == 0) outputList[[na]] <- NULL
                 }
-                # browser()
                 # outputList = append(outputList, list(cList ))
                 # names(outputList)[length(outputList)] = cName
                 rv$outputList <- outputList
                 updatedoutputList()
-                currentSelection <- input$colorbyGroups
-                updateSelectInput(
-                    inputId = "colorbyGroups",
-                    choices = names(outputList),
-                    selected = c(currentSelection, cName)
+            }
+        })
+
+
+        # obs applyName ----
+        shiny::observeEvent(input$applyName, {
+            outputList <- rv$outputList
+            cName <- input$clusterName
+            cList <- inputClusterNumber()
+            outputList <- rv$outputList
+            outputList[[cName]] <- cList
+            outputList[["Rest"]] <- c()
+            used <- unique(unlist(outputList))
+            all_levels <- levels(sce$cluster_id)
+            outputList[["Rest"]] <- as.integer(all_levels[!all_levels %in% used])
+            for (na in names(outputList)) {
+                if (length(outputList[[na]]) == 0) outputList[[na]] <- NULL
+            }
+            # browser()
+            # outputList = append(outputList, list(cList ))
+            # names(outputList)[length(outputList)] = cName
+            rv$outputList <- outputList
+            updatedoutputList()
+            currentSelection <- input$colorbyGroups
+            updateSelectInput(
+                inputId = "colorbyGroups",
+                choices = names(outputList),
+                selected = c(currentSelection, cName)
+            )
+        })
+
+        shiny::observeEvent(input$rmGroups, {
+            outputList <- rv$outputList
+            rmGroups <- input$groupRM
+            rmCluster <- outputList[rmGroups] %>%
+                unlist() %>%
+                unique()
+            rs <- isolate(rsUsed())
+            if (is.null(rs)) return(NULL)
+            rsUsed(setdiff(rs, rmCluster))
+            # keep outputList in sync with the current selection
+            rv$outputList <- .rebuildOutputList(rv$outputList, levels(sce$cluster_id), removed = NULL)
+            updatedoutputList()
+        })
+
+        # output dend ----
+        output$dend <- renderPlot({
+            dendPlot() %>%
+                plot(main = "dendrogram")
+        })
+
+        dendPlot <- reactive({
+            rs <- rsUsed()
+            req(rs)
+            selectedPoints()
+            labCol <- rep("blue", length(labels(dend)))
+            labCol[which(labels(dend) %in% (rs))] <- "red"
+            dend %>%
+                dendextend::set("leaves_col", labCol) %>%
+                dendextend::set("leaves_pch", 15) %>%
+                dendextend::set("leaves_cex", 1) %>%
+                dendextend::set("labels_cex", 0.5)
+        })
+
+        # interactive dendrogram ----
+        dendPlotlyData <- reactive({
+            g <- dendextend::as.ggdend(dend)
+            list(segments = g$segments, labels = g$labels)
+        })
+
+        output$dendPlotly <- renderPlotly({
+            dd <- dendPlotlyData()
+            rs <- rsUsed()
+            req(dd, rs)
+            label_cols <- ifelse(dd$labels$label %in% as.character(rs), "red", "black")
+            p <- ggplot() +
+                geom_segment(
+                    data = dd$segments,
+                    aes(x = x, y = y, xend = xend, yend = yend)
+                ) +
+                geom_point(
+                    data = dd$labels,
+                    aes(x = x, y = y, customdata = label),
+                    color = label_cols
+                ) +
+                geom_text(
+                    data = dd$labels,
+                    aes(x = x, y = y, label = label),
+                    vjust = 1, size = 3
+                ) +
+                theme_minimal() +
+                theme(
+                    axis.text = element_blank(),
+                    axis.title = element_blank(),
+                    panel.grid = element_blank()
                 )
-            })
+            quiet_ggplotly(p, source = "dendPlotly", tooltip = "") %>%
+                layout(dragmode = "select") %>%
+                event_register("plotly_selected") %>%
+                event_register("plotly_click")
+        })
 
-            shiny::observeEvent(input$rmGroups, {
-                outputList <- rv$outputList
-                rmGroups <- input$groupRM
-                rmCluster <- outputList[rmGroups] %>%
-                    unlist() %>%
-                    unique()
-                rs <- rsUsed_d() %>% isolate()
-                rsUsed(setdiff(rs, rmCluster))
-                # keep outputList in sync with the current selection
-                rv$outputList <- .rebuildOutputList(rv$outputList, levels(sce$cluster_id), removed = NULL)
-                updatedoutputList()
-            })
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly"), {
+            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly")
+            if (is.null(d) || nrow(d) == 0 || is.null(d$customdata)) {
+                return(NULL)
+            }
+            clicked <- as.integer(d$customdata)
+            rs <- isolate(rsUsed_d())
+            mode <- isolate(input$selectMode)
+            new_rs <- switch(EXPR = mode,
+                             "remove others" = clicked,
+                             "add" = unique(c(rs, clicked)),
+                             "remove" = setdiff(rs, clicked),
+                             clicked
+            )
+            isolate(rsUsed(new_rs))
+        })
 
-            # output dend ----
-            output$dend <- renderPlot({
-                dendPlot() %>%
-                    plot(main = "dendrogram")
-            })
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly"), {
+            d <- safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly")
+            if (is.null(d) || is.null(d$customdata)) {
+                return(NULL)
+            }
+            clicked <- as.integer(d$customdata)
+            rs <- isolate(rsUsed_d())
+            mode <- isolate(input$selectMode)
+            new_rs <- switch(EXPR = mode,
+                             "remove others" = clicked,
+                             "add" = unique(c(rs, clicked)),
+                             "remove" = setdiff(rs, clicked),
+                             clicked
+            )
+            isolate(rsUsed(new_rs))
+        })
 
-            dendPlot <- reactive({
-                rs <- rsUsed()
+        # observeEvent(input$d2Axes1 ---
+        shiny::observeEvent(input$d2Axes1, {
+            # browser()
+            activePlot(as.numeric(input$d2Axes1))
+        })
+
+        shiny::observeEvent(activePlot(), {
+        })
+
+
+        # inputClusterNumber <- reactive ----
+        inputClusterNumber <- reactive({
+            str_split(input$clusterNumbers, ",")[[1]] %>% as.integer()
+        }) %>% debounce(1000)
+
+        # violinPlotSelection <- reactive ----
+        violinPlotSelection <- reactive({
+            input$violinSelection
+        }) %>% debounce(1000)
+
+        # inputClusterNumber() ----
+        shiny::observe({
+            ic <- inputClusterNumber()
+            ic <- suppressWarnings(as.integer(ic))
+            ic <- ic[!is.na(ic)]
+            # normalise both sides to character before set operation
+            ic <- as.integer(intersect(as.character(ic), colnames(clusterPatientTable)))
+            isolate(rsUsed(ic))
+        })
+
+        # rsUsed_d
+        rsUsed_d <- rsUsed %>% debounce(1500)
+
+        # updateTextInput clusterNumbers ----
+        shiny::observe({
+            rs <- as.integer(unlist(rsUsed()))     # unlist + coerce before sort
+            rs <- sort(rs[!is.na(rs)])
+            outputList <- rv$outputList
+            updateOL <- FALSE
+            if (!"selected" %in% names(outputList)) updateOL <- TRUE
+            outputList$selected <- rs
+            rv$outputList <- outputList
+            if (updateOL) updatedoutputList()
+            updateTextInput(inputId = "clusterNumbers", value = paste(rs, collapse = ", "))
+        })
+
+
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somGrid"), {
+            message("somGrid touched")
+            # browser()
+            rs <- isolate(rsUsed())
+            if (is.null(rs)) return(NULL)
+            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somGrid")
+            if (is.null(d)) {
+                return(NULL)
+            }
+            d <- .inputSelect(d, rs, isolate(input$selectMode))
+            isolate(rsUsed(d))
+        })
+
+
+        lapply(seq_len(nPlots), function(i) {
+            observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = paste0("somData", i)), {
+                message("som", i, " touched")
+                activePlot(i)
+                rs <- isolate(rsUsed_d())
                 req(rs)
-                selectedPoints()
-                labCol <- rep("blue", length(labels(dend)))
-                labCol[which(labels(dend) %in% (rs))] <- "red"
-                dend %>%
-                    dendextend::set("leaves_col", labCol) %>%
-                    dendextend::set("leaves_pch", 15) %>%
-                    dendextend::set("leaves_cex", 1) %>%
-                    dendextend::set("labels_cex", 0.5)
+                d <- safe_event_data(verbose = verbose, "plotly_selected", source = paste0("somData", i))
+                if (is.null(d)) {
+                    return(NULL)
+                }
+                d <- .inputSelect(d, rs, isolate(input$selectMode))
+                isolate(rsUsed(d))
             })
+        })
 
-            # interactive dendrogram ----
-            dendPlotlyData <- reactive({
-                g <- dendextend::as.ggdend(dend)
-                list(segments = g$segments, labels = g$labels)
+
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "tsne"), {
+            message("tsne touched")
+            rs <- isolate(rsUsed())
+            if (is.null(rs)) return(NULL)
+            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "tsne")
+            if (is.null(d)) {
+                return(NULL)
+            }
+            # browser()
+            # save(file = "/pasteur/appa/scratch/bernd/event.RData", list = c("d", "rs"))
+            #
+            d <- .inputSelect(d, rs, isolate(input$selectMode))
+            isolate(rsUsed(d))
+        })
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "umap"), {
+            message("umap touched")
+            rs <- isolate(rsUsed())
+            if (is.null(rs)) return(NULL)
+            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "umap")
+            if (is.null(d)) {
+                return(NULL)
+            }
+            d <- .inputSelect(d, rs, isolate(input$selectMode))
+            isolate(rsUsed(d))
+        })
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "pca"), {
+            message("pca touched")
+            rs <- isolate(rsUsed())
+            if (is.null(rs)) return(NULL)
+            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "pca")
+            if (is.null(d)) {
+                return(NULL)
+            }
+            d <- .inputSelect(d, rs, isolate(input$selectMode))
+            isolate(rsUsed(d))
+        })
+
+        # output$selected  ----
+        output$selected <- renderPrint({
+
+            rs <- rsUsed()
+            req(rs)
+            rs
+        })
+
+        # cellCounts ----
+        output$cellCounts <- DT::renderDT(options = list(
+            lengthChange = FALSE,
+            scrollX = TRUE
+        ), {
+            cst <- input$compareStatsTo
+            sN <- input$singleNode %>% as.integer()
+            rs <- rsUsed()
+            req(rs)
+
+            outputList <- rv$outputList
+
+            # browser()
+            req(clusterPatientTable)
+            rSums <- rowSums(clusterPatientTable[, rs, drop = FALSE])
+            names(rSums) <- rownames(clusterPatientTable)
+            rSums <- data.table::as.data.table(t(rSums))
+            if (!cst == "none") {
+                if (cst %in% colnames(metaD$experiment_info)) {
+                    # expInfo = metaD$experiment_info
+                    numCols <- unlist(lapply(metaD$experiment_info, is.numeric), use.names = FALSE)
+                    expInfo <- metaD$experiment_info[, numCols, drop = FALSE]
+                    eI <- expInfo[, !colnames(expInfo) %in% c("sample_nr", "sample_id", "sample"), drop = FALSE]
+                    eI <- apply(eI, 2, as.numeric) %>% as.data.frame()
+                    rownames(eI) <- metaD$experiment_info$sample_id
+                    if (is.na(eI) %>% any()) {
+                        stop("NAs produced when converting experiment_info to numeric")
+                    }
+                    # ctStats = eI[,cst]
+                    ctStats <- data.table::as.data.table(t(eI[colnames(rSums), cst]))
+                    colnames(ctStats) <- colnames(rSums)
+                    rSums <- data.table::rbindlist(list(rSums, ctStats))
+                    # rbind(rSums, eI[colnames(rSums),cst])
+                    rownames(rSums) <- c("selection", cst)
+                } else if (cst %in% names(outputList)) {
+                    ctStats <- data.table::as.data.table(t(rowSums(clusterPatientTable[, outputList[[cst]], drop = FALSE])))
+                    colnames(ctStats) <- rownames(clusterPatientTable)
+                    rSums <- data.table::rbindlist(list(rSums, ctStats))
+                    # rSums = data.table::rbindlist(list(rSums, data.table::as.data.table(t())))
+                    rownames(rSums) <- c("selection", cst)
+                } else {
+                    # browser()
+                }
+            }
+            rn <- rownames(rSums)
+            ctStats <- data.table::as.data.table(t(rowSums(clusterPatientTable[, sN, drop = FALSE])))
+            colnames(ctStats) <- rownames(clusterPatientTable)
+            rSums <- data.table::rbindlist(list(rSums, ctStats))
+            # rbind(rSums, rowSums(clusterPatientTable[,sN,drop=FALSE]))
+            rownames(rSums) <- c(rn, paste("SOM node", sN))
+            # save(file = "/pasteur/appa/scratch/bernd/Rtest3.Rdata",
+            #      list = c("clusterPatientTable", "rs", "cst", "rSums", "sN"))
+            # cp =load(file = "/pasteur/appa/scratch/bernd/Rtest3.Rdata")
+            rSums
+        })
+
+        # countBar ----
+        output$CountBar <- renderPlot({
+            countBarPlot()
+        })
+
+        countBarPlot <- reactive({
+            cst <- input$compareStatsTo
+            # browser()
+            outputList <- rv$outputList
+            rs <- rsUsed()
+            req(rs)
+            groupsInput <- groupsInput()
+            req(clusterPatientTable)
+            countBarPlotFunc(rs, clusterPatientTable, cst, sce, outputList, groupsInput)
+        })
+
+        # cellPercentages ----
+        output$cellPercentages <- renderPrint({
+
+            outputList <- rv$outputList
+            rs <- rsUsed()
+            req(rs)
+
+            req(clusterPatientTable)
+            relativeToCol <- input$relativeTo
+            expInfo <- metadata(sce)$experiment_info
+            rownames(expInfo) <- expInfo$sample_id
+            expInfo <- expInfo[, !colnames(expInfo) %in% c("sample_nr", "sample_id", "sample"), drop = FALSE]
+            eI <- apply(expInfo, 2, as.numeric)
+
+            rSums <- compute_relative_counts(
+                clusterPatientTable, rs, relativeToCol, expInfo, outputList
+            )
+            names(rSums) <- rownames(clusterPatientTable)
+            noquote(formatC(signif(rSums, digits = 2), digits = 2, format = "fg", flag = "#"))
+        })
+
+        # PercentBar ----
+        output$PercentBar <- renderPlot({
+            PercentBarPlot()
+        })
+
+        PercentBarPlot <- reactive({
+            outputList <- rv$outputList
+            rs <- rsUsed()
+            req(rs)
+            req(clusterPatientTable)
+            relativeToCol <- input$relativeTo
+            groupsInput <- groupsInput()
+            PercentBarPlotFunc(sce, relativeToCol, clusterPatientTable, rs, outputList, group, groupsInput)
+        })
+
+
+        ### zooming ----
+        zoomFunc <- function(zoom, plotIdx) {
+            dimSelectionInternal <- dimSelection()
+            req(dimSelectionInternal)
+            if (all(!is.null(zoom), "xaxis.range[0]" %in% names(zoom), na.rm = TRUE)) {
+                # browser()
+                rezoom <- FALSE
+                if (all(c(
+                    dimSelectionInternal[[plotIdx]]$xzoom[1] > zoom$`xaxis.range[0]`,
+                    !is.null(dimSelectionInternal[[plotIdx]]$xzoom[1])
+                ), na.rm = TRUE)) {
+                    rezoom <- TRUE
+                }
+                if (rezoom) {
+
+                    # browser()
+                    dimSelectionInternal[[plotIdx]]$xzoom <- c(NULL, NULL)
+                    dimSelectionInternal[[plotIdx]]$yzoom <- c(NULL, NULL)
+                } else {
+                    # browser()
+                    dimSelectionInternal[[plotIdx]]$xzoom <- c(zoom$`xaxis.range[0]`, zoom$`xaxis.range[1]`)
+                    dimSelectionInternal[[plotIdx]]$yzoom <- c(zoom$`yaxis.range[0]`, zoom$`yaxis.range[1]`)
+                }
+                dimSelection(dimSelectionInternal)
+                isolate(triggerRedraw(triggerRedraw() + 1))
+            }
+        }
+
+        # obs somData (zoom) ----
+        # Previously six identical shiny::observe blocks with plotIdx <- 1 … 6.
+        # Replaced with lapply(seq_len(nPlots), …) to match the pattern used
+        # everywhere else in the server.
+        lapply(seq_len(nPlots), function(plotIdx) {
+            shiny::observe({
+                zoom <- safe_event_data(
+                    verbose  = verbose,
+                    "plotly_relayout",
+                    source   = paste0("somData", plotIdx)
+                )
+                zoomFunc(zoom, plotIdx)
             })
+        })
 
-            output$dendPlotly <- renderPlotly({
-                dd <- dendPlotlyData()
-                rs <- rsUsed()
-                req(dd, rs)
-                label_cols <- ifelse(dd$labels$label %in% as.character(rs), "red", "black")
-                p <- ggplot() +
-                    geom_segment(
-                        data = dd$segments,
-                        aes(x = x, y = y, xend = xend, yend = yend)
-                    ) +
-                    geom_point(
-                        data = dd$labels,
-                        aes(x = x, y = y, customdata = label),
-                        color = label_cols
-                    ) +
-                    geom_text(
-                        data = dd$labels,
-                        aes(x = x, y = y, label = label),
-                        vjust = 1, size = 3
-                    ) +
-                    theme_minimal() +
-                    theme(
-                        axis.text = element_blank(),
-                        axis.title = element_blank(),
-                        panel.grid = element_blank()
+        # observe samples2plot. ---
+        sample2PlotDb <- reactive(input$samples2plot) %>% debounce(500)
+
+        shiny::observe({
+            sampleIds <- sample2PlotDb()
+            selected <- sce_subsampled[, sce_subsampled$sample_id %in% sampleIds]
+            dfPlot(data.frame(t(assays(selected)[[1]])))
+        })
+
+        shiny::observeEvent(dimSelection(), {
+            dimSelection <- dimSelection()
+            for (idx in seq_along(dimSelection)) {
+            }
+        })
+
+        shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "scatterPlot"), {
+
+            sc <- sce
+            rs <- isolate(rsUsed_d())
+            dimSelection <- dimSelection()
+            sampleIds <- isolate(input$samples2plot)
+            # browser()
+            # req(rs)
+            d <- safe_event_data(verbose = verbose, "plotly_selected", source = "scatterPlot")
+            plotIdx <- activePlot()
+            if (is.null(d)) {
+                return(NULL)
+            }
+            req(d$curveNumber)
+            d <- d[d$curveNumber == 1, ]
+            # d = d$pointNumber+1
+            # "view", , "add"
+            minx <- min(d$x)
+            maxx <- max(d$x)
+            miny <- min(d$y)
+            maxy <- max(d$y)
+            ids <- which(dfPlot()[, dimSelection[[plotIdx]]$dims[1] %>% make.names()] > minx &
+                             dfPlot()[, dimSelection[[plotIdx]]$dims[1] %>% make.names()] < maxx &
+                             dfPlot()[, dimSelection[[plotIdx]]$dims[2] %>% make.names()] > miny &
+                             dfPlot()[, dimSelection[[plotIdx]]$dims[2] %>% make.names()] < maxy)
+            ids <- colData(sce_subsampled[, sce_subsampled$sample_id %in% sampleIds])[ids, "cluster_id"]
+            # activePlot(1)
+            # rs = rsUsed()
+            # req(rs)
+            # d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData1")
+            # if(is.null(d)){return(NULL)}
+            ids <- switch(EXPR = isolate(input$selectMode),
+                          "remove others" = intersect(ids, rs),
+                          "add" = unique(c(ids, rs)),
+                          "remove" = rs[!rs %in% ids],
+                          ids
+            )
+            isolate(rsUsed(ids))
+        })
+
+
+        ###   output$somData* ----
+        # Shared base plot for each dimSelection slot, cached per channel pair.
+        # This avoids rebuilding plotSOMScatter from scratch for each of the 6 outputs.
+        somBasePlots <- lapply(seq_len(nPlots), function(plotIdx) {
+            reactive({
+                dimSel <- dimSelection()
+                req(length(dimSel) >= plotIdx)
+                dims <- dimSel[[plotIdx]]$dims
+                req(dims)
+                colorVar <- input$somColorVar
+                sizeVar <- input$somSizeVar
+                if (is.null(colorVar)) colorVar <- "n"
+                if (is.null(sizeVar)) sizeVar <- "max"
+                plotSOMScatter(
+                    x = sce,
+                    chs = c(dims[1], dims[2]),
+                    pointSize = sizeVar,
+                    color_by = colorVar,
+                    zeros     = TRUE,
+                    xRN = sceRN, xCN = sceCN
+                )
+            }) %>%
+                bindCache({
+                    ds <- dimSelection()
+                    if (length(ds) >= plotIdx && !is.null(ds[[plotIdx]]$dims))
+                        ds[[plotIdx]]$dims
+                    else
+                        NULL
+                },
+                input$somColorVar,
+                input$somSizeVar
+                )
+        })
+
+        # Cached projection data frames for the showGroups SOM view.
+        # This avoids repeating ggplot_build() + left_join() every time rs or
+        # colorbyGroups change; only the final ggplot construction remains.
+        projectionDfs <- lapply(seq_len(nPlots), function(plotIdx) {
+            reactive({
+                pp1 <- somBasePlots[[plotIdx]]()
+                req(pp1)
+                buildProjectionDf(pp1, plotIdx, dimSelection(), sce)
+            }) %>%
+                bindCache({
+                    ds <- dimSelection()
+                    if (length(ds) >= plotIdx && !is.null(ds[[plotIdx]]$dims))
+                        ds[[plotIdx]]$dims
+                    else
+                        NULL
+                })
+        })
+
+        lapply(seq_len(nPlots), function(i) {
+            local({
+                plotIdxLocal <- i
+                output[[paste0("somData", plotIdxLocal)]] <- renderPlotly({
+                    colorbyGroups <- input$colorbyGroups
+                    selectedUpdate2()
+                    showGroups <- input$showGroups
+                    dimSelection <- dimSelection()
+                    rs <- rsUsed_d()
+                    req(rs)
+                    triggerRedraw()
+                    plotIdx <- if (plotIdxLocal == 6) activePlot() else plotIdxLocal
+                    pp1 <- somBasePlots[[plotIdx]]()
+                    projectionDf <- if (showGroups) projectionDfs[[plotIdx]]() else NULL
+
+                    pctl <- input$scatterPercentile
+                    if (is.null(pctl)) pctl <- 0.99
+                    tailP <- (1 - pctl) / 2
+                    somCodes <- metaD[[somCodesName]]
+                    dims <- dimSelection[[plotIdx]]$dims
+                    xlimP <- if (dims[1] %in% colnames(somCodes)) quantile(somCodes[, dims[1]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
+                    ylimP <- if (dims[2] %in% colnames(somCodes)) quantile(somCodes[, dims[2]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
+
+                    p3 <- somPlot(pp1, plotIdx, rs, colorbyGroups, showGroups,
+                                  dimSelection = dimSelection, sce = sce, metaD = metaD,
+                                  outputList = rv$outputList, projectionDf = projectionDf,
+                                  xlim = xlimP, ylim = ylimP
                     )
-                quiet_ggplotly(p, source = "dendPlotly", tooltip = "") %>%
+                    return(p3)
+                })
+            })
+        })
+
+        dimRedSelection <- reactive({
+            retVal <- input$dimRedSelection
+            retVal
+        }) %>% debounce(1000)
+
+        # tsne ----
+        tsne <- reactive({
+            # browser()
+            dimRedCols <- dimRedSelection()
+            perplexity <- input$perplexity
+            tsne <- tsneFunc(dimRedSelection = dimRedCols, perplexity = perplexity, sce, somCodesName)
+            return(tsne)
+        }) %>%
+            bindCache(dimRedSelection(), input$perplexity) %>%
+            debounce(1000)
+
+        umap <- reactive({
+            dimRedCols <- input$dimRedSelection
+            pumap <- umap::umap.defaults
+            pumap$n_neighbors <- input$n_neighbors
+            um <- umap::umap(metaD[[somCodesName]][, dimRedCols], config = pumap)
+            return(um)
+        }) %>%
+            bindCache(input$dimRedSelection, input$n_neighbors) %>%
+            debounce(1000)
+
+        pca <- reactive({
+            dimRedCols <- input$dimRedSelection
+            pca <- prcomp(t(metaD[[somCodesName]][, dimRedCols]), scale = FALSE, rank. = 2)
+            return(pca)
+        }) %>%
+            bindCache(input$dimRedSelection) %>%
+            debounce(1000)
+
+        output$tsne <- renderPlotly({
+            p3 <- tsnePlot()
+            showLegend <- input$showlegend
+            # browser()
+            retVal <- quiet_ggplotly(p3, source = paste0("tsne"), tooltip = "text")
+
+            if (showLegend) {
+                retVal <- retVal %>% plotly::layout(legend = list(
+                    x = 0, y = -3,
+                    xanchor = "left",
+                    yanchor = "bottom",
+                    orientation = "h"
+                ))
+            } else {
+                retVal <- retVal %>% layout(
+                    showlegend = FALSE
+                )
+            }
+
+            retVal <- retVal %>%
+                layout(dragmode = "select") %>%
+                event_register("plotly_selected") %>%
+                event_register("plotly_relayout")
+            retVal
+        })
+
+        tsnePlot <- reactive({
+            selectedUpdate2()
+            rs <- rsUsed_d()
+            # browser()
+            req(rs)
+            triggerRedraw()
+            tsne <- tsne()
+            # dimSelection =  dimSelection()
+
+            df <- as.data.frame(tsne$Y)
+            names(df) <- c("tsne1", "tsne2")
+            p3 <- drawProjection(df, rs, colorbyGroups = input$colorbyGroups, sce = sce, outputList = outputList)
+            return(p3)
+        })
+
+        output$umap <- renderPlotly({
+            p3 <- umapPlot()
+            showLegend <- input$showlegend
+            retVal <- quiet_ggplotly(p3, source = paste0("umap"), tooltip = "text")
+            if (showLegend) {
+                retVal <- retVal %>% plotly::layout(legend = list(
+                    x = 0, y = -3,
+                    xanchor = "left",
+                    yanchor = "bottom",
+                    orientation = "h"
+                ))
+            } else {
+                retVal <- retVal %>% layout(
+                    showlegend = FALSE
+                )
+            }
+
+            retVal <- retVal %>%
+                layout(dragmode = "select") %>%
+                event_register("plotly_selected") %>%
+                event_register("plotly_relayout")
+            retVal
+        })
+
+
+        umapPlot <- reactive({
+            umap <- umap()
+            # plot(um$layout)
+            selectedUpdate2()
+            rs <- rsUsed_d()
+            req(rs)
+            triggerRedraw()
+            df <- as.data.frame(umap$layout)
+            names(df) <- c("umap1", "umap2")
+
+            p3 <- drawProjection(df, rs, colorbyGroups = input$colorbyGroups, sce = sce, outputList = outputList)
+            return(p3)
+        })
+
+        output$pca <- renderPlotly({
+            pca <- pca()
+            rs <- rsUsed_d()
+            req(rs)
+            triggerRedraw()
+            req(pca)
+            df <- as.data.frame(pca$rotation)
+            colnames(df) <- c("pc1", "pc2")
+            showLegend <- input$showlegend
+
+            p3 <- pcaPlot()
+            retVal <- quiet_ggplotly(p3, source = paste0("pca"), tooltip = "text")
+
+            if (showLegend) {
+                retVal <- retVal %>% plotly::layout(legend = list(
+                    x = 0, y = -3,
+                    xanchor = "left",
+                    yanchor = "bottom",
+                    orientation = "h"
+                ))
+            } else {
+                retVal <- retVal %>% layout(
+                    showlegend = FALSE
+                )
+            }
+            retVal <- retVal %>%
+                layout(dragmode = "select") %>%
+                event_register("plotly_selected") %>%
+                event_register("plotly_relayout")
+            return(retVal)
+            # retVal %>%
+            #   add_trace(x=df$pc1, y=df$pc2, text=~paste("cluster: ", df$cluster),
+            #             hoverinfo = 'text', mode = "none")
+        })
+
+        pcaPlot <- reactive({
+            pca <- pca()
+            selectedUpdate2()
+            rs <- rsUsed_d()
+            req(rs)
+            triggerRedraw()
+            req(pca)
+            df <- as.data.frame(pca$rotation)
+            colnames(df) <- c("pc1", "pc2")
+            p3 <- drawProjection(df, rs, colorbyGroups = input$colorbyGroups, sce = sce, outputList = outputList)
+
+            return(p3)
+        })
+
+
+        output$somClusters <- renderText({
+
+            rs <- rsUsed()
+            req(rs)
+            rs <- as.integer(intersect(rs, colnames(clusterPatientTable)))
+            # the row it should be plotted
+            as.integer(rs) / 40 + 1
+            rowElement <- list()
+            lapply(40:1, function(x) {
+                rowElement[[x]] <- paste(rs[as.integer(rs / 40) + 1 == x], collapse = ", ")
+            }) %>%
+                unlist() %>%
+                paste(collapse = "\n")
+            # paste(sort(rs,decreasing = TRUE), collapse = ", ")
+        })
+
+
+        ### output$scatter ----
+        output$scatter <- renderPlotly({
+            rs <- rsUsed()
+            req(rs)
+            dimSelection <- dimSelection()
+            sampleIds <- input$samples2plot
+            # browser()
+            plotIdx <- activePlot()
+            cidIdx <- colData(sce_subsampled)$cluster_id %in% rs & colData(sce_subsampled)$sample_id %in% sampleIds
+            if (length(cidIdx) < 1) {
+                return(NULL)
+            }
+            if (!any(cidIdx)) return(plotly::plotly_empty())
+
+            pp <- scatterPlot()
+            if (is.null(pp)) return(plotly::plotly_empty())
+
+            # here we add a grid for selecting points, spanning the current percentile zoom
+            chs <- dimSelection[[plotIdx]]$dims
+            chx <- make.names(chs[1])
+            chy <- make.names(chs[2])
+            xVals <- df[cidIdx, chx, drop = TRUE]
+            yVals <- df[cidIdx, chy, drop = TRUE]
+            pctl <- input$scatterPercentile
+            if (is.null(pctl)) pctl <- 0.99
+            tailP <- (1 - pctl) / 2
+            xlimP <- quantile(xVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            ylimP <- quantile(yVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            xpoints <- seq(from = xlimP[1], to = xlimP[2], length.out = 100) %>%
+                rep(100) %>%
+                sort()
+            ypoints <- seq(from = ylimP[1], to = ylimP[2], length.out = 100) %>% rep(100)
+            # browser()
+            pp <- quiet_ggplotly(pp, source = "scatterPlot") %>%
+                add_trace(
+                    x = xpoints,
+                    y = ypoints,
+                    mode = "markers",
+                    type = "scatter",
+                    fill = "none",
+                    fillcolor = "#e763fa",
+                    opacity = 0.01 # ,     # size=1.9,
+                ) %>%
+                layout(dragmode = "select") %>%
+                event_register("plotly_selected") %>%
+                event_register("plotly_relayout")
+            return(pp)
+        })
+
+        scatterPlot <- reactive({
+
+            rs <- rsUsed()
+            req(rs)
+            dimSelection <- dimSelection()
+            sampleIds <- input$samples2plot
+            req(sampleIds)
+            # browser()
+            plotIdx <- activePlot()
+            req(dimSelection, length(dimSelection) >= plotIdx)
+            cidIdx <- colData(sce_subsampled)$cluster_id %in% rs & colData(sce_subsampled)$sample_id %in% sampleIds
+            if (sum(cidIdx) < 1) {
+                return(NULL)
+            }
+
+            chs <- dimSelection[[plotIdx]]$dims
+            chx <- make.names(chs[1])
+            chy <- make.names(chs[2])
+            xVals <- df[cidIdx, chx, drop = TRUE]
+            yVals <- df[cidIdx, chy, drop = TRUE]
+
+            pctl <- input$scatterPercentile
+            if (is.null(pctl)) pctl <- 0.99
+            tailP <- (1 - pctl) / 2
+            xlimP <- quantile(xVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            ylimP <- quantile(yVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
+
+            pp <- plotCytoScatter(
+                rownms = sce_subsampledRN,
+                x = sce_subsampled[, cidIdx],
+                chs = chs,
+                bins = 200
+            ) +
+                xlim(xlimP) +
+                ylim(ylimP)
+
+            return(pp)
+        })
+
+
+        # somRaster ----
+        output$somRaster <- renderPlot({
+            xy <- somRasterPlot()
+            req(xy)
+            req(baseRasterGgplot)
+            baseRasterGgplot +
+                geom_point(data = xy, aes(x = x, y = y), color = "red", size = 1, inherit.aes = FALSE) +
+                geom_point(data = xy, aes(x = x, y = y), color = "red", shape = 3, size = 1, inherit.aes = FALSE)
+        })
+
+        # somRasterSelect ----
+        output$somRasterSelect <- renderPlotly({
+            rs <- rsUsed()
+            if (is.null(rs)) return(NULL)
+            p3 <- .buildSOMRasterSelectPlot(somRasterData, rs)
+            req(inherits(p3, "ggplot"))
+            quiet_ggplotly(p3, source = "somGrid", tooltip = "") %>%
+                plotly::layout(showlegend = FALSE, dragmode = "select") %>%
+                plotly::event_register("plotly_selected") %>%
+                plotly::event_register("plotly_relayout")
+        })
+
+        somRasterPlot <- reactive({
+            rs <- as.integer(unlist(rsUsed()))
+            rs <- rs[!is.na(rs) & rs > 0L]
+            req(length(rs) > 0L)
+            # id-based subsetting: safe regardless of row ordering
+            somRasterData[somRasterData$id %in% rs, c("x", "y"), drop = FALSE]
+        })
+
+        # flowSOMPie ----
+        output$flowSOMPie <- renderPlot({
+            p <- flowSOMPiePlot()
+            req(p)
+            p
+        })
+
+        flowSOMPiePlot <- reactive({
+            rs <- rsUsed()
+            req(rs)
+            .buildFlowSOMPiePlot(metaD[[somCodesName]], rs, colsUsed)
+        })
+
+        # flowSOMStars ----
+        if (!is.null(fsom)) {
+            output$flowSOMStars <- renderPlotly({
+                req(fsom)
+                ret <- FlowSOM::PlotStars(
+                    fsom,
+                    backgroundValues = fsom$metaclustering,
+                    list_insteadof_ggarrange = TRUE
+                )
+                p <- ret$tree
+                coords <- fsom$MST$l
+                coord_df <- data.frame(
+                    x = coords[, 1],
+                    y = coords[, 2],
+                    id = seq_len(nrow(coords))
+                )
+                p_click <- p + geom_point(
+                    data = coord_df,
+                    aes(x = x, y = y, customdata = id),
+                    alpha = 0,
+                    size = 8,
+                    inherit.aes = FALSE
+                )
+                quiet_ggplotly(p_click, source = "flowSOMStars", tooltip = "") %>%
                     layout(dragmode = "select") %>%
                     event_register("plotly_selected") %>%
                     event_register("plotly_click")
             })
 
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly"), {
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "dendPlotly")
+            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "flowSOMStars"), {
+                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "flowSOMStars")
                 if (is.null(d) || nrow(d) == 0 || is.null(d$customdata)) {
                     return(NULL)
                 }
@@ -589,16 +1369,16 @@ clusterSelector <- function(sce, # main input has to contain:
                 rs <- isolate(rsUsed_d())
                 mode <- isolate(input$selectMode)
                 new_rs <- switch(EXPR = mode,
-                    "remove others" = clicked,
-                    "add" = unique(c(rs, clicked)),
-                    "remove" = setdiff(rs, clicked),
-                    clicked
+                                 "remove others" = clicked,
+                                 "add" = unique(c(rs, clicked)),
+                                 "remove" = setdiff(rs, clicked),
+                                 clicked
                 )
                 isolate(rsUsed(new_rs))
             })
 
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly"), {
-                d <- safe_event_data(verbose = verbose, "plotly_click", source = "dendPlotly")
+            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_click", source = "flowSOMStars"), {
+                d <- safe_event_data(verbose = verbose, "plotly_click", source = "flowSOMStars")
                 if (is.null(d) || is.null(d$customdata)) {
                     return(NULL)
                 }
@@ -606,1212 +1386,267 @@ clusterSelector <- function(sce, # main input has to contain:
                 rs <- isolate(rsUsed_d())
                 mode <- isolate(input$selectMode)
                 new_rs <- switch(EXPR = mode,
-                    "remove others" = clicked,
-                    "add" = unique(c(rs, clicked)),
-                    "remove" = setdiff(rs, clicked),
-                    clicked
+                                 "remove others" = clicked,
+                                 "add" = unique(c(rs, clicked)),
+                                 "remove" = setdiff(rs, clicked),
+                                 clicked
                 )
                 isolate(rsUsed(new_rs))
             })
-
-            # observe({
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected")
-            #   # d2 <- safe_event_data(verbose = verbose, "plotly_selected")
-            #   if(is.null(d)){return(NULL)}
-            #   if(nrow(d)==0){return(NULL)}
-            #   d = d[d$curveNumber==0,]
-            #   rsUsed(d$pointNumber+1)
-            # })
-
-            # observeEvent(input$d2Axes1 ---
-            shiny::observeEvent(input$d2Axes1, {
-                # browser()
-                activePlot(as.numeric(input$d2Axes1))
-            })
-
-            shiny::observeEvent(activePlot(), {
-            })
-
-            # inputSelect = function ----
-            inputSelect <- function(d, rs, mode) {
-                req(rs)
-                req(d)
-                req(d$curveNumber)
-                # browser()
-                # d = d[d$curveNumber==0,]
-                d <- d$customdata
-                # "view", , "add"
-
-                d <- switch(EXPR = mode,
-                    "remove others" = intersect(d, rs),
-                    "add" = unique(c(d, rs)),
-                    "remove" = rs[!rs %in% d],
-                    d
-                )
-                d
-            }
-            # inputClusterNumber <- reactive ----
-            inputClusterNumber <- reactive({
-                str_split(input$clusterNumbers, ",")[[1]] %>% as.integer()
-            }) %>% debounce(1000)
-
-            # violinPlotSelection <- reactive ----
-            violinPlotSelection <- reactive({
-                input$violinSelection
-            }) %>% debounce(1000)
-
-            # inputClusterNumber() ----
-            shiny::observe({
-                ic <- inputClusterNumber()
-                # in case some clusters are missing
-                ic <- as.integer(intersect(ic, colnames(clusterPatientTable)))
-                isolate(rsUsed(ic))
-            })
-
-            # rsUsed_d
-            rsUsed_d <- rsUsed %>% debounce(10000)
-
-            # updateTextInput clusterNumbers ----
-            shiny::observe({
-                rs <- rsUsed() %>% sort()
-                outputList <- rv$outputList
-                updateOL <- FALSE
-                if (!"selected" %in% names(outputList)) {
-                    updateOL <- TRUE
-                }
-                outputList$selected <- rs
-                rv$outputList <- outputList
-                if (updateOL) {
-                    updatedoutputList()
-                }
-                updateTextInput(inputId = "clusterNumbers", value = paste(rs, collapse = ", "))
-            })
-
-
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somGrid"), {
-                message("somGrid touched")
-                # browser()
-                rs <- rsUsed_d() %>% isolate()
-                req(rs)
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somGrid")
-                if (is.null(d)) {
-                    return(NULL)
-                }
-                d <- inputSelect(d, rs, isolate(input$selectMode))
-                isolate(rsUsed(d))
-            })
-
-
-            lapply(seq_len(nPlots), function(i) {
-                observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = paste0("somData", i)), {
-                    message("som", i, " touched")
-                    activePlot(i)
-                    rs <- isolate(rsUsed_d())
-                    req(rs)
-                    d <- safe_event_data(verbose = verbose, "plotly_selected", source = paste0("somData", i))
-                    if (is.null(d)) {
-                        return(NULL)
-                    }
-                    d <- inputSelect(d, rs, isolate(input$selectMode))
-                    isolate(rsUsed(d))
-                })
-            })
-            #
-            # # observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData1"),{ ----
-            # #2DO: need to be adjusted for variable list of plots
-            # shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData1"),{
-            #   message("som1 touched")
-            #   # browser()
-            #   activePlot(1)
-            #   rs = rsUsed_d() %>% isolate()
-            #   req(rs)
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData1")
-            #   if(is.null(d)){return(NULL)}
-            #   d = inputSelect(d, rs, isolate(input$selectMode))
-            #   isolate(rsUsed(d))
-            # })
-            # shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData2"),{
-            #   message("som2 touched")
-            #   activePlot(2)
-            #   rs = rsUsed_d() %>% isolate()
-            #   req(rs)
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData2")
-            #   if(is.null(d)){return(NULL)}
-            #   d = inputSelect(d, rs, isolate(input$selectMode))
-            #   # selectedPoints(d)
-            #   isolate(rsUsed(d))
-            # })
-            # shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData3"),{
-            #   message("som3 touched")
-            #   activePlot(3)
-            #   rs = rsUsed_d() %>% isolate()
-            #   req(rs)
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData3")
-            #   if(is.null(d)){return(NULL)}
-            #   d = inputSelect(d, rs, isolate(input$selectMode))
-            #   # selectedPoints(d)
-            #   isolate(rsUsed(d))
-            # })
-            # shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData4"),{
-            #   message("som4 touched")
-            #   activePlot(4)
-            #   rs = rsUsed_d() %>% isolate()
-            #   req(rs)
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData4")
-            #   if(is.null(d)){return(NULL)}
-            #   d = inputSelect(d, rs, isolate(input$selectMode))
-            #   # selectedPoints(d)
-            #   isolate(rsUsed(d))
-            # })
-            # shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData5"),{
-            #   message("som5 touched")
-            #   activePlot(5)
-            #   rs = rsUsed_d() %>% isolate()
-            #   req(rs)
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData5")
-            #   if(is.null(d)){return(NULL)}
-            #   d = inputSelect(d, rs, isolate(input$selectMode))
-            #   isolate(rsUsed(d))
-            # })
-            # shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "somData6"),{
-            #   # activePlot(6)
-            #   message("som6 touched")
-            #   rs = rsUsed_d() %>% isolate()
-            #   req(rs)
-            #   d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData6")
-            #   if(is.null(d)){return(NULL)}
-            #   d = inputSelect(d, rs, isolate(input$selectMode))
-            #   isolate(rsUsed(d))
-            # })
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "tsne"), {
-                message("tsne touched")
-                rs <- rsUsed_d() %>% isolate()
-                req(rs)
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "tsne")
-                if (is.null(d)) {
-                    return(NULL)
-                }
-                # browser()
-                # save(file = "/pasteur/appa/scratch/bernd/event.RData", list = c("d", "rs"))
-                #
-                d <- inputSelect(d, rs, isolate(input$selectMode))
-                isolate(rsUsed(d))
-            })
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "umap"), {
-                message("umap touched")
-                rs <- rsUsed_d() %>% isolate()
-                req(rs)
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "umap")
-                if (is.null(d)) {
-                    return(NULL)
-                }
-                d <- inputSelect(d, rs, isolate(input$selectMode))
-                isolate(rsUsed(d))
-            })
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "pca"), {
-                message("pca touched")
-                rs <- rsUsed_d() %>% isolate()
-                req(rs)
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "pca")
-                if (is.null(d)) {
-                    return(NULL)
-                }
-                d <- inputSelect(d, rs, isolate(input$selectMode))
-                isolate(rsUsed(d))
-            })
-
-            # output$selected  ----
-            output$selected <- renderPrint({
-
-                rs <- rsUsed()
-                req(rs)
-                rs
-            })
-
-            # cellCounts ----
-            output$cellCounts <- DT::renderDT(options = list(
-                lengthChange = FALSE,
-                scrollX = TRUE
-            ), {
-                cst <- input$compareStatsTo
-                sN <- input$singleNode %>% as.integer()
-                rs <- rsUsed()
-                req(rs)
-
-                outputList <- rv$outputList
-
-                # browser()
-                req(clusterPatientTable)
-                rSums <- rowSums(clusterPatientTable[, rs, drop = FALSE])
-                names(rSums) <- rownames(clusterPatientTable)
-                rSums <- data.table::as.data.table(t(rSums))
-                if (!cst == "none") {
-                    if (cst %in% colnames(metaD$experiment_info)) {
-                        # expInfo = metaD$experiment_info
-                        numCols <- unlist(lapply(metaD$experiment_info, is.numeric), use.names = FALSE)
-                        expInfo <- metaD$experiment_info[, numCols, drop = FALSE]
-                        eI <- expInfo[, !colnames(expInfo) %in% c("sample_nr", "sample_id", "sample"), drop = FALSE]
-                        eI <- apply(eI, 2, as.numeric) %>% as.data.frame()
-                        rownames(eI) <- metaD$experiment_info$sample_id
-                        if (is.na(eI) %>% any()) {
-                            stop("NAs produced when converting experiment_info to numeric")
-                        }
-                        # ctStats = eI[,cst]
-                        ctStats <- data.table::as.data.table(t(eI[colnames(rSums), cst]))
-                        colnames(ctStats) <- colnames(rSums)
-                        rSums <- data.table::rbindlist(list(rSums, ctStats))
-                        # rbind(rSums, eI[colnames(rSums),cst])
-                        rownames(rSums) <- c("selection", cst)
-                    } else if (cst %in% names(outputList)) {
-                        ctStats <- data.table::as.data.table(t(rowSums(clusterPatientTable[, outputList[[cst]], drop = FALSE])))
-                        colnames(ctStats) <- rownames(clusterPatientTable)
-                        rSums <- data.table::rbindlist(list(rSums, ctStats))
-                        # rSums = data.table::rbindlist(list(rSums, data.table::as.data.table(t())))
-                        rownames(rSums) <- c("selection", cst)
-                    } else {
-                        # browser()
-                    }
-                }
-                rn <- rownames(rSums)
-                ctStats <- data.table::as.data.table(t(rowSums(clusterPatientTable[, sN, drop = FALSE])))
-                colnames(ctStats) <- rownames(clusterPatientTable)
-                rSums <- data.table::rbindlist(list(rSums, ctStats))
-                # rbind(rSums, rowSums(clusterPatientTable[,sN,drop=FALSE]))
-                rownames(rSums) <- c(rn, paste("SOM node", sN))
-                # save(file = "/pasteur/appa/scratch/bernd/Rtest3.Rdata",
-                #      list = c("clusterPatientTable", "rs", "cst", "rSums", "sN"))
-                # cp =load(file = "/pasteur/appa/scratch/bernd/Rtest3.Rdata")
-                rSums
-            })
-
-            # countBar ----
-            output$CountBar <- renderPlot({
-                countBarPlot()
-            })
-
-            countBarPlot <- reactive({
-                cst <- input$compareStatsTo
-                # browser()
-                outputList <- rv$outputList
-                rs <- rsUsed()
-                req(rs)
-                groupsInput <- groupsInput()
-                req(clusterPatientTable)
-                countBarPlotFunc(rs, clusterPatientTable, cst, sce, outputList, groupsInput)
-            })
-
-            # cellPercentages ----
-            output$cellPercentages <- renderPrint({
-
-                outputList <- rv$outputList
-                rs <- rsUsed()
-                req(rs)
-
-                req(clusterPatientTable)
-                relativeToCol <- input$relativeTo
-                expInfo <- metadata(sce)$experiment_info
-                rownames(expInfo) <- expInfo$sample_id
-                expInfo <- expInfo[, !colnames(expInfo) %in% c("sample_nr", "sample_id", "sample"), drop = FALSE]
-                eI <- apply(expInfo, 2, as.numeric)
-
-                rSums <- compute_relative_counts(
-                    clusterPatientTable, rs, relativeToCol, expInfo, outputList
-                )
-                names(rSums) <- rownames(clusterPatientTable)
-
-                # if(relativeToCol == "none"){
-                #   rSums = rowSums(clusterPatientTable[,rs,drop=FALSE])/rowSums(clusterPatientTable[,,drop=FALSE])*100
-                # } else {
-                #   if (relativeToCol %in% colnames(metadata(sce)$experiment_info)){
-                #     rSums =rowSums(clusterPatientTable[,rs,drop=FALSE])/expInfo[rownames(clusterPatientTable),relativeToCol]*100
-                #   } else {
-                #     if(relativeToCol %in% names(outputList)){
-                #       rSums = rowSums(clusterPatientTable[,rs,drop=FALSE])/rowSums(clusterPatientTable[,outputList[[relativeToCol]],drop=FALSE])*100
-                #     } else{
-                #     }
-                #   }
-                # }
-                # names(rSums) = rownames(clusterPatientTable)
-                # rSums$id = rownames(clusterPatientTable)
-                # names(rSums) = rownames(clusterPatientTable)
-                noquote(formatC(signif(rSums, digits = 2), digits = 2, format = "fg", flag = "#"))
-            })
-
-            # PercentBar ----
-            output$PercentBar <- renderPlot({
-                PercentBarPlot()
-            })
-
-            PercentBarPlot <- reactive({
-                outputList <- rv$outputList
-                rs <- rsUsed()
-                req(rs)
-                req(clusterPatientTable)
-                relativeToCol <- input$relativeTo
-                groupsInput <- groupsInput()
-                PercentBarPlotFunc(sce, relativeToCol, clusterPatientTable, rs, outputList, group, groupsInput)
-            })
-
-
-            ### zooming ----
-            zoomFunc <- function(zoom, plotIdx) {
-                dimSelectionInternal <- dimSelection()
-                req(dimSelectionInternal)
-                if (all(!is.null(zoom), "xaxis.range[0]" %in% names(zoom), na.rm = TRUE)) {
-                    # browser()
-                    rezoom <- FALSE
-                    if (all(c(
-                        dimSelectionInternal[[plotIdx]]$xzoom[1] > zoom$`xaxis.range[0]`,
-                        !is.null(dimSelectionInternal[[plotIdx]]$xzoom[1])
-                    ), na.rm = TRUE)) {
-                        rezoom <- TRUE
-                    }
-                    if (rezoom) {
-
-                        # browser()
-                        dimSelectionInternal[[plotIdx]]$xzoom <- c(NULL, NULL)
-                        dimSelectionInternal[[plotIdx]]$yzoom <- c(NULL, NULL)
-                    } else {
-                        # browser()
-                        dimSelectionInternal[[plotIdx]]$xzoom <- c(zoom$`xaxis.range[0]`, zoom$`xaxis.range[1]`)
-                        dimSelectionInternal[[plotIdx]]$yzoom <- c(zoom$`yaxis.range[0]`, zoom$`yaxis.range[1]`)
-                    }
-                    dimSelection(dimSelectionInternal)
-                    isolate(triggerRedraw(triggerRedraw() + 1))
-                }
-            }
-
-            # obs somData ----
-            shiny::observe({
-
-                plotIdx <- 1
-                zoom <- safe_event_data(verbose = verbose, "plotly_relayout", source = paste0("somData", plotIdx))
-                zoomFunc(zoom, plotIdx)
-            })
-            shiny::observe({
-
-                plotIdx <- 2
-                zoom <- safe_event_data(verbose = verbose, "plotly_relayout", source = paste0("somData", plotIdx))
-                zoomFunc(zoom, plotIdx)
-            })
-            shiny::observe({
-
-                plotIdx <- 3
-                zoom <- safe_event_data(verbose = verbose, "plotly_relayout", source = paste0("somData", plotIdx))
-                zoomFunc(zoom, plotIdx)
-            })
-            shiny::observe({
-
-                plotIdx <- 4
-                zoom <- safe_event_data(verbose = verbose, "plotly_relayout", source = paste0("somData", plotIdx))
-                zoomFunc(zoom, plotIdx)
-            })
-            shiny::observe({
-
-                plotIdx <- 5
-                zoom <- safe_event_data(verbose = verbose, "plotly_relayout", source = paste0("somData", plotIdx))
-                zoomFunc(zoom, plotIdx)
-            })
-            shiny::observe({
-
-                plotIdx <- 6
-                zoom <- safe_event_data(verbose = verbose, "plotly_relayout", source = paste0("somData", plotIdx))
-                zoomFunc(zoom, plotIdx)
-            })
-            # observe samples2plot. ---
-            sample2PlotDb <- reactive(input$samples2plot) %>% debounce(500)
-
-            shiny::observe({
-                sampleIds <- sample2PlotDb()
-                selected <- sce_subsampled[, sce_subsampled$sample_id %in% sampleIds]
-                dfPlot(data.frame(t(assays(selected)[[1]])))
-            })
-
-            shiny::observeEvent(dimSelection(), {
-                dimSelection <- dimSelection()
-                for (idx in seq_along(dimSelection)) {
-                }
-            })
-
-            shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "scatterPlot"), {
-
-                sc <- sce
-                rs <- isolate(rsUsed_d())
-                dimSelection <- dimSelection()
-                sampleIds <- isolate(input$samples2plot)
-                # browser()
-                # req(rs)
-                d <- safe_event_data(verbose = verbose, "plotly_selected", source = "scatterPlot")
-                plotIdx <- activePlot()
-                if (is.null(d)) {
-                    return(NULL)
-                }
-                req(d$curveNumber)
-                d <- d[d$curveNumber == 1, ]
-                # d = d$pointNumber+1
-                # "view", , "add"
-                minx <- min(d$x)
-                maxx <- max(d$x)
-                miny <- min(d$y)
-                maxy <- max(d$y)
-                ids <- which(dfPlot()[, dimSelection[[plotIdx]]$dims[1] %>% make.names()] > minx &
-                                dfPlot()[, dimSelection[[plotIdx]]$dims[1] %>% make.names()] < maxx &
-                                dfPlot()[, dimSelection[[plotIdx]]$dims[2] %>% make.names()] > miny &
-                                dfPlot()[, dimSelection[[plotIdx]]$dims[2] %>% make.names()] < maxy)
-                ids <- colData(sce_subsampled[, sce_subsampled$sample_id %in% sampleIds])[ids, "cluster_id"]
-                # activePlot(1)
-                # rs = rsUsed()
-                # req(rs)
-                # d <- safe_event_data(verbose = verbose, "plotly_selected", source = "somData1")
-                # if(is.null(d)){return(NULL)}
-                ids <- switch(EXPR = isolate(input$selectMode),
-                    "remove others" = intersect(ids, rs),
-                    "add" = unique(c(ids, rs)),
-                    "remove" = rs[!rs %in% ids],
-                    ids
-                )
-                isolate(rsUsed(ids))
-                # isolate(rsUsed(colData(sce)[ids,"cluster_id"] %>% unique()))
-
-                # rsUsed( unique(colData(sce[,colData(sce)$cluster_id %in% rs])$"cluster_id" ))
-                # # d
-                # browser()
-                # # d = inputSelect(d, rs, isolate(input$selectMode))
-                # rsUsed(d)
-            })
-
-
-            ###   output$somData* ----
-            # Shared base plot for each dimSelection slot, cached per channel pair.
-            # This avoids rebuilding plotSOMScatter from scratch for each of the 6 outputs.
-            somBasePlots <- lapply(seq_len(nPlots), function(plotIdx) {
-                reactive({
-                    dimSel <- dimSelection()
-                    req(dimSel)
-                    dims <- dimSel[[plotIdx]]$dims
-                    colorVar <- input$somColorVar
-                    sizeVar <- input$somSizeVar
-                    if (is.null(colorVar)) colorVar <- "n"
-                    if (is.null(sizeVar)) sizeVar <- "max"
-                    plotSOMScatter(
-                        x = sce,
-                        chs = c(dims[1], dims[2]),
-                        pointSize = sizeVar,
-                        color_by = colorVar,
-                        xRN = sceRN, xCN = sceCN
-                    )
-                }) %>%
-                    bindCache(dimSelection()[[plotIdx]]$dims, input$somColorVar, input$somSizeVar)
-            })
-
-            # Cached projection data frames for the showGroups SOM view.
-            # This avoids repeating ggplot_build() + left_join() every time rs or
-            # colorbyGroups change; only the final ggplot construction remains.
-            projectionDfs <- lapply(seq_len(nPlots), function(plotIdx) {
-                reactive({
-                    pp1 <- somBasePlots[[plotIdx]]()
-                    req(pp1)
-                    buildProjectionDf(pp1, plotIdx, dimSelection(), sce)
-                }) %>%
-                    bindCache(dimSelection()[[plotIdx]]$dims)
-            })
-
-            lapply(seq_len(nPlots), function(i) {
-                local({
-                    plotIdxLocal <- i
-                    output[[paste0("somData", plotIdxLocal)]] <- renderPlotly({
-                        colorbyGroups <- input$colorbyGroups
-                        selectedUpdate2()
-                        showGroups <- input$showGroups
-                        dimSelection <- dimSelection()
-                        rs <- rsUsed_d()
-                        req(rs)
-                        triggerRedraw()
-                        plotIdx <- if (plotIdxLocal == 6) activePlot() else plotIdxLocal
-                        pp1 <- somBasePlots[[plotIdx]]()
-                        projectionDf <- if (showGroups) projectionDfs[[plotIdx]]() else NULL
-
-                        pctl <- input$scatterPercentile
-                        if (is.null(pctl)) pctl <- 0.99
-                        tailP <- (1 - pctl) / 2
-                        somCodes <- metaD[[somCodesName]]
-                        dims <- dimSelection[[plotIdx]]$dims
-                        xlimP <- if (dims[1] %in% colnames(somCodes)) quantile(somCodes[, dims[1]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-                        ylimP <- if (dims[2] %in% colnames(somCodes)) quantile(somCodes[, dims[2]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-
-                        p3 <- somPlot(pp1, plotIdx, rs, colorbyGroups, showGroups,
-                            dimSelection = dimSelection, sce = sce, metaD = metaD,
-                            outputList = rv$outputList, projectionDf = projectionDf,
-                            xlim = xlimP, ylim = ylimP
-                        )
-                        quiet_ggplotly(p3, source = paste0("somData", plotIdxLocal), tooltip = "") %>%
-                            layout(showlegend = FALSE, dragmode = "select") %>%
-                            event_register("plotly_selected") %>%
-                            event_register("plotly_relayout")
-                    })
-                })
-            })
-
-            # color selections ----
-            # observeEvent(input,{
-            #   currentSelection = input$colorbyGroups
-            #   outputList = rv$outputList
-            #   updateSelectInput(inputId = "colorbyGroups",
-            #                     choices = names(outputList),
-            #                     selected = currentSelection
-            #                     )
-            # })
-
-            dimRedSelection <- reactive({
-                retVal <- input$dimRedSelection
-                retVal
-            }) %>% debounce(1000)
-
-            # tsne ----
-            tsne <- reactive({
-                dimRedCols <- dimRedSelection()
-                perplexity <- input$perplexity
-                tsne <- tsneFunc(dimRedSelection = dimRedCols, perplexity = perplexity, sce, somCodesName)
-                return(tsne)
-            }) %>%
-                bindCache(dimRedSelection(), input$perplexity) %>%
-                debounce(1000)
-
-            umap <- reactive({
-                dimRedCols <- input$dimRedSelection
-                pumap <- umap::umap.defaults
-                pumap$n_neighbors <- input$n_neighbors
-                um <- umap::umap(metaD[[somCodesName]][, dimRedCols], config = pumap)
-                return(um)
-            }) %>%
-                bindCache(input$dimRedSelection, input$n_neighbors) %>%
-                debounce(1000)
-
-            pca <- reactive({
-                dimRedCols <- input$dimRedSelection
-                pca <- prcomp(t(metaD[[somCodesName]][, dimRedCols]), scale = FALSE, rank. = 2)
-                return(pca)
-            }) %>%
-                bindCache(input$dimRedSelection) %>%
-                debounce(1000)
-
-            output$tsne <- renderPlotly({
-                p3 <- tsnePlot()
-                showLegend <- input$showlegend
-                # browser()
-                retVal <- quiet_ggplotly(p3, source = paste0("tsne"), tooltip = "text")
-
-                if (showLegend) {
-                    retVal <- retVal %>% plotly::layout(legend = list(
-                        x = 0, y = -3,
-                        xanchor = "left",
-                        yanchor = "bottom",
-                        orientation = "h"
-                    ))
-                } else {
-                    retVal <- retVal %>% layout(
-                        showlegend = FALSE
-                    )
-                }
-
-                retVal <- retVal %>%
-                    layout(dragmode = "select") %>%
-                    event_register("plotly_selected") %>%
-                    event_register("plotly_relayout")
-                retVal
-            })
-
-            tsnePlot <- reactive({
-                selectedUpdate2()
-                rs <- rsUsed_d()
-                req(rs)
-                triggerRedraw()
-                tsne <- tsne()
-                # dimSelection =  dimSelection()
-
-                df <- as.data.frame(tsne$Y)
-                names(df) <- c("tsne1", "tsne2")
-                p3 <- drawProjection(df, rs, colorbyGroups = input$colorbyGroups, sce = sce, outputList = outputList)
-                return(p3)
-            })
-
-            output$umap <- renderPlotly({
-                p3 <- umapPlot()
-                showLegend <- input$showlegend
-                retVal <- quiet_ggplotly(p3, source = paste0("umap"), tooltip = "text")
-                if (showLegend) {
-                    retVal <- retVal %>% plotly::layout(legend = list(
-                        x = 0, y = -3,
-                        xanchor = "left",
-                        yanchor = "bottom",
-                        orientation = "h"
-                    ))
-                } else {
-                    retVal <- retVal %>% layout(
-                        showlegend = FALSE
-                    )
-                }
-
-                retVal <- retVal %>%
-                    layout(dragmode = "select") %>%
-                    event_register("plotly_selected") %>%
-                    event_register("plotly_relayout")
-                retVal
-            })
-
-
-            umapPlot <- reactive({
-                umap <- umap()
-                # plot(um$layout)
-                selectedUpdate2()
-                rs <- rsUsed_d()
-                req(rs)
-                triggerRedraw()
-                df <- as.data.frame(umap$layout)
-                names(df) <- c("umap1", "umap2")
-
-                p3 <- drawProjection(df, rs, colorbyGroups = input$colorbyGroups, sce = sce, outputList = outputList)
-                return(p3)
-            })
-
-            output$pca <- renderPlotly({
-                pca <- pca()
-                rs <- rsUsed_d()
-                req(rs)
-                triggerRedraw()
-                req(pca)
-                df <- as.data.frame(pca$rotation)
-                colnames(df) <- c("pc1", "pc2")
-                showLegend <- input$showlegend
-
-                p3 <- pcaPlot()
-                retVal <- quiet_ggplotly(p3, source = paste0("pca"), tooltip = "text")
-
-                if (showLegend) {
-                    retVal <- retVal %>% plotly::layout(legend = list(
-                        x = 0, y = -3,
-                        xanchor = "left",
-                        yanchor = "bottom",
-                        orientation = "h"
-                    ))
-                } else {
-                    retVal <- retVal %>% layout(
-                        showlegend = FALSE
-                    )
-                }
-                retVal <- retVal %>%
-                    layout(dragmode = "select") %>%
-                    event_register("plotly_selected") %>%
-                    event_register("plotly_relayout")
-                return(retVal)
-                # retVal %>%
-                #   add_trace(x=df$pc1, y=df$pc2, text=~paste("cluster: ", df$cluster),
-                #             hoverinfo = 'text', mode = "none")
-            })
-
-            pcaPlot <- reactive({
-                pca <- pca()
-                selectedUpdate2()
-                rs <- rsUsed_d()
-                req(rs)
-                triggerRedraw()
-                req(pca)
-                df <- as.data.frame(pca$rotation)
-                colnames(df) <- c("pc1", "pc2")
-                p3 <- drawProjection(df, rs, colorbyGroups = input$colorbyGroups, sce = sce, outputList = outputList)
-
-                return(p3)
-            })
-
-
-            output$somClusters <- renderText({
-
-                rs <- rsUsed()
-                req(rs)
-                rs <- as.integer(intersect(rs, colnames(clusterPatientTable)))
-                # the row it should be plotted
-                as.integer(rs) / 40 + 1
-                rowElement <- list()
-                lapply(40:1, function(x) {
-                    rowElement[[x]] <- paste(rs[as.integer(rs / 40) + 1 == x], collapse = ", ")
-                }) %>%
-                    unlist() %>%
-                    paste(collapse = "\n")
-                # paste(sort(rs,decreasing = TRUE), collapse = ", ")
-            })
-
-
-            ### output$scatter ----
-            output$scatter <- renderPlotly({
-                rs <- rsUsed()
-                req(rs)
-                dimSelection <- dimSelection()
-                sampleIds <- input$samples2plot
-                # browser()
-                plotIdx <- activePlot()
-                cidIdx <- colData(sce_subsampled)$cluster_id %in% rs & colData(sce_subsampled)$sample_id %in% sampleIds
-                if (length(cidIdx) < 1) {
-                    return(NULL)
-                }
-
-                pp <- scatterPlot()
-                # here we add a grid for selecting points, spanning the current percentile zoom
-                chs <- dimSelection[[plotIdx]]$dims
-                chx <- make.names(chs[1])
-                chy <- make.names(chs[2])
-                xVals <- df[cidIdx, chx, drop = TRUE]
-                yVals <- df[cidIdx, chy, drop = TRUE]
-                pctl <- input$scatterPercentile
-                if (is.null(pctl)) pctl <- 0.99
-                tailP <- (1 - pctl) / 2
-                xlimP <- quantile(xVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
-                ylimP <- quantile(yVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
-                xpoints <- seq(from = xlimP[1], to = xlimP[2], length.out = 100) %>%
-                    rep(100) %>%
-                    sort()
-                ypoints <- seq(from = ylimP[1], to = ylimP[2], length.out = 100) %>% rep(100)
-                # browser()
-                pp <- quiet_ggplotly(pp, source = "scatterPlot") %>%
-                    add_trace(
-                        x = xpoints,
-                        y = ypoints,
-                        mode = "markers",
-                        type = "scatter",
-                        fill = "none",
-                        fillcolor = "#e763fa",
-                        opacity = 0.01 # ,     # size=1.9,
-                    ) %>%
-                    layout(dragmode = "select") %>%
-                    event_register("plotly_selected") %>%
-                    event_register("plotly_relayout")
-                return(pp)
-            })
-
-            scatterPlot <- reactive({
-
-                rs <- rsUsed()
-                req(rs)
-                dimSelection <- dimSelection()
-                sampleIds <- input$samples2plot
-                req(sampleIds)
-                # browser()
-                plotIdx <- activePlot()
-                req(dimSelection, length(dimSelection) >= plotIdx)
-                cidIdx <- colData(sce_subsampled)$cluster_id %in% rs & colData(sce_subsampled)$sample_id %in% sampleIds
-                if (sum(cidIdx) < 1) {
-                    return(NULL)
-                }
-
-                chs <- dimSelection[[plotIdx]]$dims
-                chx <- make.names(chs[1])
-                chy <- make.names(chs[2])
-                xVals <- df[cidIdx, chx, drop = TRUE]
-                yVals <- df[cidIdx, chy, drop = TRUE]
-
-                pctl <- input$scatterPercentile
-                if (is.null(pctl)) pctl <- 0.99
-                tailP <- (1 - pctl) / 2
-                xlimP <- quantile(xVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
-                ylimP <- quantile(yVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
-
-                pp <- plotScatterBJ(
-                    rowNames = sce_subsampledRN,
-                    x = sce_subsampled[, cidIdx],
-                    chs = chs,
-                    bins = 200
-                ) +
-                    xlim(xlimP) +
-                    ylim(ylimP)
-
-                return(pp)
-            })
-
-
-            # somRaster ----
-            output$somRaster <- renderPlot({
-                xy <- somRasterPlot()
-                req(xy)
-                req(baseRasterGgplot)
-                baseRasterGgplot +
-                    geom_point(data = xy, aes(x = x, y = y), color = "red", size = 1, inherit.aes = FALSE) +
-                    geom_point(data = xy, aes(x = x, y = y), color = "red", shape = 3, size = 1, inherit.aes = FALSE)
-            })
-
-            # somRasterSelect ----
-            output$somRasterSelect <- renderPlotly({
-                rs <- rsUsed()
-                req(rs)
-                p3 <- .buildSOMRasterSelectPlot(somRasterData, rs)
-                quiet_ggplotly(p3, source = "somGrid", tooltip = "") %>%
-                    layout(showlegend = FALSE, dragmode = "select") %>%
-                    event_register("plotly_selected") %>%
-                    event_register("plotly_relayout")
-            })
-
-            somRasterPlot <- reactive({
-                rs <- rsUsed()
-                req(rs)
-                somRasterData[rs, c("x", "y"), drop = FALSE]
-            })
-
-            # flowSOMPie ----
-            output$flowSOMPie <- renderPlot({
-                p <- flowSOMPiePlot()
-                req(p)
-                p
-            })
-
-            flowSOMPiePlot <- reactive({
-                rs <- rsUsed()
-                req(rs)
-                .buildFlowSOMPiePlot(metaD[[somCodesName]], rs, colsUsed)
-            })
-
-            # flowSOMStars ----
-            if (!is.null(fsom)) {
-                output$flowSOMStars <- renderPlotly({
-                    req(fsom)
-                    ret <- FlowSOM::PlotStars(
-                        fsom,
-                        backgroundValues = fsom$metaclustering,
-                        list_insteadof_ggarrange = TRUE
-                    )
-                    p <- ret$tree
-                    coords <- fsom$MST$l
-                    coord_df <- data.frame(
-                        x = coords[, 1],
-                        y = coords[, 2],
-                        id = seq_len(nrow(coords))
-                    )
-                    p_click <- p + geom_point(
-                        data = coord_df,
-                        aes(x = x, y = y, customdata = id),
-                        alpha = 0,
-                        size = 8,
-                        inherit.aes = FALSE
-                    )
-                    quiet_ggplotly(p_click, source = "flowSOMStars", tooltip = "") %>%
-                        layout(dragmode = "select") %>%
-                        event_register("plotly_selected") %>%
-                        event_register("plotly_click")
-                })
-
-                shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_selected", source = "flowSOMStars"), {
-                    d <- safe_event_data(verbose = verbose, "plotly_selected", source = "flowSOMStars")
-                    if (is.null(d) || nrow(d) == 0 || is.null(d$customdata)) {
-                        return(NULL)
-                    }
-                    clicked <- as.integer(d$customdata)
-                    rs <- isolate(rsUsed_d())
-                    mode <- isolate(input$selectMode)
-                    new_rs <- switch(EXPR = mode,
-                        "remove others" = clicked,
-                        "add" = unique(c(rs, clicked)),
-                        "remove" = setdiff(rs, clicked),
-                        clicked
-                    )
-                    isolate(rsUsed(new_rs))
-                })
-
-                shiny::observeEvent(safe_event_data(verbose = verbose, "plotly_click", source = "flowSOMStars"), {
-                    d <- safe_event_data(verbose = verbose, "plotly_click", source = "flowSOMStars")
-                    if (is.null(d) || is.null(d$customdata)) {
-                        return(NULL)
-                    }
-                    clicked <- as.integer(d$customdata)
-                    rs <- isolate(rsUsed_d())
-                    mode <- isolate(input$selectMode)
-                    new_rs <- switch(EXPR = mode,
-                        "remove others" = clicked,
-                        "add" = unique(c(rs, clicked)),
-                        "remove" = setdiff(rs, clicked),
-                        clicked
-                    )
-                    isolate(rsUsed(new_rs))
-                })
-            }
-
-            ## VlnPlot ----
-
-            output$VlnPlot <- renderPlot({
-                vlnPlot()
-            })
-            shiny::observe({
-            })
-            vlnPlot <- reactive({
-                # req(input$violinBox)  # only compute while violin box is expanded
-                # observe
-                # this changes the groups
-                input$applyName
-                input$rmGrp
-                violinSelection <- violinPlotSelection()
-                upsetSelection <- input$upsetSelection
-                outputList <- rv$outputList
-
-                req(outputList)
-
-                # save(file = "vln.Rdata", list=ls())
-                ##                  Cell Idents  Feat     Expr
-                # Idents = named groups of clusters
-                # Feat = marker
-                # Expr = SOM value
-                # cell = SOM node
-                markers <- colnames(sce@metadata[[somCodesName]])
-                if (length(upsetSelection) < 3) {
-                    upsetSelection <- names(outputList)
-                }
-                markers <- intersect(markers, violinSelection)
-                somCodes <- sce@metadata[[somCodesName]]
-                nNodes <- nrow(somCodes)
-                parts <- lapply(upsetSelection, function(na) {
-                    rows <- outputList[[na]]
-                    rows <- rows[rows != 0]
-                    if (length(rows) < 2) {
-                        return(NULL)
-                    }
-                    wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
-                    wide$somNode <- factor(rows, levels = seq_len(nNodes))
-                    long <- tidyr::pivot_longer(wide,
-                        cols = markers,
-                        names_to = "marker", values_to = "expr"
-                    )
-                    long$grpName <- na
-                    long
-                })
-                data <- data.table::rbindlist(parts)
-                if (nrow(data) > 0) {
-                    data$marker <- factor(data$marker, levels = markers)
-                    data$grpName <- factor(data$grpName, levels = upsetSelection)
-                }
-                nb.cols <- length(unique(data$marker))
-                mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
-
-                p <- ggplot(data, aes(factor(marker), expr, fill = marker)) +
-                    geom_violin(scale = "width", adjust = 1, trim = TRUE) +
-                    scale_y_continuous(expand = c(0, 0), position = "right", labels = function(x) {
-                        c(rep(x = "", times = length(x) - 2), x[length(x) - 1], "")
-                    }) +
-                    facet_grid(rows = vars(grpName), scales = "free", switch = "y") +
-                    theme_cowplot(font_size = 12) +
-                    theme(
-                        legend.position = "none", panel.spacing = unit(0, "lines"),
-                        plot.title = element_text(hjust = 0.5),
-                        panel.background = element_rect(fill = NA, color = "black"),
-                        strip.background = element_blank(),
-                        strip.text = element_text(face = "bold"),
-                        strip.text.y.left = element_text(angle = 0),
-                        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
-                    ) +
-                    scale_fill_manual(values = mycolors) +
-                    ggtitle("Marker on x-axis") +
-                    xlab("Marker") +
-                    ylab("Expression Level")
-
-                p
-            })
-            ## VlnPlot2 ----
-            output$VlnPlot2 <- renderPlot({
-                VlnPlot2()
-            })
-
-
-            VlnPlot2 <- reactive({
-                # req(input$violinBox)  # only compute while violin box is expanded
-                # observe
-                # this changes the groups
-                input$applyName
-                input$rmGrp
-                upsetSelection <- input$upsetSelection
-                violinSelection <- violinPlotSelection()
-                outputList <- rv$outputList
-                req(outputList)
-                # save(file = "vln.Rdata", list=ls())
-                ##                  Cell Idents  Feat     Expr
-                # Idents = named groups of clusters
-                # Feat = marker
-                # Expr = SOM value
-                # cell = SOM node
-                p <- plotViolin2Func(sce, somCodesName, violinSelection, upsetSelection, outputList)
-                return(p)
-            })
-
-            ## close app ----
-            shiny::observeEvent(input$close, {
-                shinyjs::js$closeWindow()
-                assign(x = "outputList", value = rv$outputList, envir = env)
-                shiny::stopApp(rv$outputList)
-            })
-
-            ## upset plot ----
-            output$UpSet <- renderPlot({
-                upSetPlot()
-            })
-
-            selectedUpdate <- reactiveVal(value = 0)
-
-            shiny::observe({
-                rs <- rsUsed_d()
-                if ("selected" %in% input$upsetSelection) {
-                    isolate(selectedUpdate(selectedUpdate() + 1))
-                }
-            })
-
-            upSetPlot <- reactive({
-                # req(input$upsetBox)  # only compute while UpSet box is expanded
-                # inputList = reactiveValuesToList(input)
-                # save(file = "UpSet.RData", list = c(ls()))
-                # cp = load("UpSet.RData")
-                selectedUpdate()
-                input$applyName
-                upsetSelection <- input$upsetSelection
-                input$rmGrp
-                outputList <- rv$outputList
-                upsetPlotFunc(upsetSelection, outputList, sce)
-            })
-
-
-            output$downloadPlots <- downloadHandler(
-                filename = function() {
-                    req(input$clusterNameSelect)
-                    paste(input$clusterNameSelect, ".pdf", sep = "")
-                },
-                content = function(file) {
-                    dimSelection <- dimSelection()
-                    rs <- c(1, 2, 3, 4, 8)
-                    rs <- rsUsed()
-                    req(rs)
-                    pdf(file = file)
-
-                    plotIdx <- 1
-
-                    message("printing dendPlot", class(dendPlot()))
-                    dendPlot() %>%
-                        plot(main = "dendrogram")
-                    message("printing countBarPlot")
-                    print(countBarPlot())
-
-                    message("printing PercentBarPlot")
-                    print(PercentBarPlot())
-
-
-                    pctl <- input$scatterPercentile
-                    if (is.null(pctl)) pctl <- 0.99
-                    tailP <- (1 - pctl) / 2
-                    somCodes <- metaD[[somCodesName]]
-                    dlColorVar <- input$somColorVar
-                    dlSizeVar <- input$somSizeVar
-                    if (is.null(dlColorVar)) dlColorVar <- "n"
-                    if (is.null(dlSizeVar)) dlSizeVar <- "max"
-                    for (plotIdx in seq_len(nPlots)) {
-                        message("printing somScatter", plotIdx)
-                        dims <- dimSelection[[plotIdx]]$dims
-                        pp1 <- plotSOMScatter(
-                            x = sce,
-                            chs = c(dims[1], dims[2]),
-                            pointSize = dlSizeVar,
-                            color_by = dlColorVar, xRN = sceRN, xCN = sceCN
-                        )
-                        xlimP <- if (dims[1] %in% colnames(somCodes)) quantile(somCodes[, dims[1]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-                        ylimP <- if (dims[2] %in% colnames(somCodes)) quantile(somCodes[, dims[2]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-                        print(ggsomPlot(pp1, plotIdx, rs, dimSelection, sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP))
-                    }
-                    message("printing tsnePlot")
-                    print(tsnePlot())
-                    message("printing umapPlot")
-                    print(umapPlot())
-                    message("printing pcaPlot")
-                    print(pcaPlot())
-
-                    message("printing scatterPlot")
-                    print(scatterPlot())
-                    message("printing somRasterPlot")
-                    xy <- somRasterPlot()
-                    if (!is.null(xy) && !is.null(baseRasterGgplot)) {
-                        print(baseRasterGgplot +
-                                geom_point(data = xy, aes(x = x, y = y), color = "red", size = 1, inherit.aes = FALSE) +
-                                geom_point(data = xy, aes(x = x, y = y), color = "red", shape = 3, size = 1, inherit.aes = FALSE))
-                    }
-
-                    message("printing vlnPlot")
-                    dlOutputList <- rv$outputList
-                    dlUpsetSel <- input$upsetSelection
-                    dlViolinSel <- input$violinSelection
-                    if (length(dlUpsetSel) < 3) dlUpsetSel <- names(dlOutputList)
-                    if (is.null(dlViolinSel)) dlViolinSel <- colsUsed
-                    pVln <- plotViolinFunc(sce, somCodesName, dlUpsetSel, dlOutputList, dlViolinSel)
-                    if (!is.null(pVln)) print(pVln)
-
-                    message("printing VlnPlot2")
-                    pVln2 <- plotViolin2Func(sce, somCodesName, dlViolinSel, dlUpsetSel, dlOutputList)
-                    if (!is.null(pVln2)) print(pVln2)
-
-                    message("printing upSetPlot")
-                    pUpset <- upsetPlotFunc(dlUpsetSel, dlOutputList, sce)
-                    if (!is.null(pUpset)) print(pUpset)
-                    dev.off()
-                    message("done printing")
-                }
-            )
-
-            # observer zoom dimSelection ----
-            dimSelection <- reactiveVal(list())
-            shiny::observe({
-                dimSelection <- list()
-                for (idx in seq_len(nPlots)) {
-                    d1 <- input[[paste0("d", idx, ".1")]]
-                    d2 <- input[[paste0("d", idx, ".2")]]
-                    req(d1, d2)
-                    lim1 <- channelLimits[[d1]]
-                    lim2 <- channelLimits[[d2]]
-                    req(lim1, lim2)
-                    dimSelection[[idx]] <- list(
-                        dims = c(d1, d2),
-                        xlim = c(lim1["min"], lim1["max"]),
-                        ylim = c(lim2["min"], lim2["max"]),
-                        xzoom = c(NULL, NULL),
-                        yzoom = c(NULL, NULL)
-                    )
-                }
-                dimSelection(dimSelection)
-            })
-
-            # output$scatterPoints <- renderPlotly({
-            #   if(!input$showPoints) return(NULL)
-            #   rs = rsUsed()
-            #   req(rs)
-            #   # browser()
-            #   plotIdx = activePlot()
-            #   # browser()
-            #
-            #   pp = ggplot( data = df[colData(sce)$cluster_id %in% rs,],
-            #                mapping = aes_string(x=dimSelection[[plotIdx]]$dims[1] %>% make.names(),
-            #                                     y=dimSelection[[plotIdx]]$dims[2]%>% make.names())) + geom_point()
-            #
-            #   ggplotly(pp, source = "scatterPlot") %>%
-            #     layout(dragmode = "select") %>%
-            #     event_register("plotly_selected") %>%
-            #     event_register("plotly_relayout")
-            #
-            # })
         }
 
-    # sce = sce# main input has to contain:
-    #                      sce_subsampled = sce_subsampled # subsampled sce object
-    #                      outputList = outputList # list of named nodes
-    #                      colTree = NULL # Tree object to plot
-    #                      dList = dList
-    #                      dend = NULL
-    #                      dendTable = NULL
-    #                      clusterPatientTable = clusterPatientTable
-    #                      somCodesName = "SOM_codes" # SOM_codes.1
-    #                      nPlots = 6
-    #                      somRasterData = somRasterData
-    #                      somRasterObj = somRasterObj
-    #                      # env = environment()
-    #
-    #
-    #
-    #   shinyApp(ui = ui, server = server)
+        ## VlnPlot ----
+
+        output$VlnPlot <- renderPlot({
+            vlnPlot()
+        })
+        shiny::observe({
+        })
+        vlnPlot <- reactive({
+            # req(input$violinBox)  # only compute while violin box is expanded
+            # observe
+            # this changes the groups
+            input$applyName
+            input$rmGrp
+            violinSelection <- violinPlotSelection()
+            upsetSelection <- input$upsetSelection
+            outputList <- rv$outputList
+
+            req(outputList)
+
+            # save(file = "vln.Rdata", list=ls())
+            ##                  Cell Idents  Feat     Expr
+            # Idents = named groups of clusters
+            # Feat = marker
+            # Expr = SOM value
+            # cell = SOM node
+            markers <- colnames(sce@metadata[[somCodesName]])
+            if (length(upsetSelection) < 3) {
+                upsetSelection <- names(outputList)
+            }
+            markers <- intersect(markers, violinSelection)
+            somCodes <- sce@metadata[[somCodesName]]
+            nNodes <- nrow(somCodes)
+            parts <- lapply(upsetSelection, function(na) {
+                rows <- outputList[[na]]
+                rows <- rows[rows != 0]
+                if (length(rows) < 2) {
+                    return(NULL)
+                }
+                wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
+                wide$somNode <- factor(rows, levels = seq_len(nNodes))
+                long <- tidyr::pivot_longer(wide,
+                                            cols = markers,
+                                            names_to = "marker", values_to = "expr"
+                )
+                long$grpName <- na
+                long
+            })
+            data <- data.table::rbindlist(parts)
+            if (nrow(data) == 0) {
+                return(
+                    ggplot() + theme_void() +
+                        labs(title = "No groups with \u2265 2 SOM nodes")
+                )
+            }
+
+            data$marker <- factor(data$marker, levels = markers)
+            data$grpName <- factor(data$grpName, levels = upsetSelection)
+
+            nb.cols <- length(unique(data$marker))
+            mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
+
+            p <- ggplot(data, aes(factor(marker), expr, fill = marker)) +
+                geom_violin(scale = "width", adjust = 1, trim = TRUE) +
+                scale_y_continuous(expand = c(0, 0), position = "right", labels = function(x) {
+                    c(rep(x = "", times = length(x) - 2), x[length(x) - 1], "")
+                }) +
+                facet_grid(rows = vars(grpName), scales = "free", switch = "y") +
+                theme_cowplot(font_size = 12) +
+                theme(
+                    legend.position = "none", panel.spacing = unit(0, "lines"),
+                    plot.title = element_text(hjust = 0.5),
+                    panel.background = element_rect(fill = NA, color = "black"),
+                    strip.background = element_blank(),
+                    strip.text = element_text(face = "bold"),
+                    strip.text.y.left = element_text(angle = 0),
+                    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)
+                ) +
+                scale_fill_manual(values = mycolors) +
+                ggtitle("Marker on x-axis") +
+                xlab("Marker") +
+                ylab("Expression Level")
+
+            p
+        })
+        ## VlnPlot2 ----
+        output$VlnPlot2 <- renderPlot({
+            VlnPlot2()
+        })
+
+
+        VlnPlot2 <- reactive({
+            # req(input$violinBox)  # only compute while violin box is expanded
+            # observe
+            # this changes the groups
+            input$applyName
+            input$rmGrp
+            upsetSelection <- input$upsetSelection
+            violinSelection <- violinPlotSelection()
+            outputList <- rv$outputList
+            req(outputList)
+            # save(file = "vln.Rdata", list=ls())
+            ##                  Cell Idents  Feat     Expr
+            # Idents = named groups of clusters
+            # Feat = marker
+            # Expr = SOM value
+            # cell = SOM node
+            p <- plotViolin2Func(sce, somCodesName, violinSelection, upsetSelection, outputList)
+            return(p)
+        })
+
+        ## close app ----
+        shiny::observeEvent(input$close, {
+            shinyjs::js$closeWindow()
+            assign(x = "outputList", value = rv$outputList, envir = env)
+            shiny::stopApp(rv$outputList)
+        })
+
+        ## upset plot ----
+        output$UpSet <- renderPlot({
+            upSetPlot()
+        })
+
+        selectedUpdate <- reactiveVal(value = 0)
+
+        shiny::observe({
+            rs <- rsUsed_d()
+            if ("selected" %in% input$upsetSelection) {
+                isolate(selectedUpdate(selectedUpdate() + 1))
+            }
+        })
+
+        upSetPlot <- reactive({
+            # req(input$upsetBox)  # only compute while UpSet box is expanded
+            # inputList = reactiveValuesToList(input)
+            # save(file = "UpSet.RData", list = c(ls()))
+            # cp = load("UpSet.RData")
+            selectedUpdate()
+            input$applyName
+            upsetSelection <- input$upsetSelection
+            input$rmGrp
+            outputList <- rv$outputList
+            upsetPlotFunc(upsetSelection, outputList, sce)
+        })
+
+
+        output$downloadPlots <- downloadHandler(
+            filename = function() {
+                req(input$clusterNameSelect)
+                paste(input$clusterNameSelect, ".pdf", sep = "")
+            },
+            content = function(file) {
+                dimSelection <- dimSelection()
+                rs <- c(1, 2, 3, 4, 8)
+                rs <- rsUsed()
+                req(rs)
+                pdf(file = file)
+
+                plotIdx <- 1
+
+                message("printing dendPlot", class(dendPlot()))
+                dendPlot() %>%
+                    plot(main = "dendrogram")
+                message("printing countBarPlot")
+                print(countBarPlot())
+
+                message("printing PercentBarPlot")
+                print(PercentBarPlot())
+
+
+                pctl <- input$scatterPercentile
+                if (is.null(pctl)) pctl <- 0.99
+                tailP <- (1 - pctl) / 2
+                somCodes <- metaD[[somCodesName]]
+                dlColorVar <- input$somColorVar
+                dlSizeVar <- input$somSizeVar
+                if (is.null(dlColorVar)) dlColorVar <- "n"
+                if (is.null(dlSizeVar)) dlSizeVar <- "max"
+                for (plotIdx in seq_len(nPlots)) {
+                    message("printing somScatter", plotIdx)
+                    dims <- dimSelection[[plotIdx]]$dims
+                    pp1 <- plotSOMScatter(
+                        x = sce,
+                        chs = c(dims[1], dims[2]),
+                        pointSize = dlSizeVar,
+                        color_by = dlColorVar, xRN = sceRN, xCN = sceCN
+                    )
+                    xlimP <- if (dims[1] %in% colnames(somCodes)) quantile(somCodes[, dims[1]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
+                    ylimP <- if (dims[2] %in% colnames(somCodes)) quantile(somCodes[, dims[2]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
+                    print(ggsomPlot(pp1, plotIdx, rs, dimSelection, sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP))
+                }
+                message("printing tsnePlot")
+                print(tsnePlot())
+                message("printing umapPlot")
+                print(umapPlot())
+                message("printing pcaPlot")
+                print(pcaPlot())
+
+                message("printing scatterPlot")
+                print(scatterPlot())
+                message("printing somRasterPlot")
+                xy <- somRasterPlot()
+                if (!is.null(xy) && !is.null(baseRasterGgplot)) {
+                    print(baseRasterGgplot +
+                              geom_point(data = xy, aes(x = x, y = y), color = "red", size = 1, inherit.aes = FALSE) +
+                              geom_point(data = xy, aes(x = x, y = y), color = "red", shape = 3, size = 1, inherit.aes = FALSE))
+                }
+
+                message("printing vlnPlot")
+                dlOutputList <- rv$outputList
+                dlUpsetSel <- input$upsetSelection
+                dlViolinSel <- input$violinSelection
+                if (length(dlUpsetSel) < 3) dlUpsetSel <- names(dlOutputList)
+                if (is.null(dlViolinSel)) dlViolinSel <- colsUsed
+                pVln <- plotViolinFunc(sce, somCodesName, dlUpsetSel, dlOutputList, dlViolinSel)
+                if (!is.null(pVln)) print(pVln)
+
+                message("printing VlnPlot2")
+                pVln2 <- plotViolin2Func(sce, somCodesName, dlViolinSel, dlUpsetSel, dlOutputList)
+                if (!is.null(pVln2)) print(pVln2)
+
+                message("printing upSetPlot")
+                pUpset <- upsetPlotFunc(dlUpsetSel, dlOutputList, sce)
+                if (!is.null(pUpset)) print(pUpset)
+                dev.off()
+                message("done printing")
+            }
+        )
+
+        # observer zoom dimSelection ----
+        dimSelection <- reactiveVal(list())
+        shiny::observe({
+            dimSelection <- list()
+            for (idx in seq_len(nPlots)) {
+                d1 <- input[[paste0("d", idx, ".1")]]
+                d2 <- input[[paste0("d", idx, ".2")]]
+                req(d1, d2)
+                lim1 <- channelLimits[[d1]]
+                lim2 <- channelLimits[[d2]]
+                req(lim1, lim2)
+                dimSelection[[idx]] <- list(
+                    dims = c(d1, d2),
+                    xlim = c(lim1["min"], lim1["max"]),
+                    ylim = c(lim2["min"], lim2["max"]),
+                    xzoom = c(NULL, NULL),
+                    yzoom = c(NULL, NULL)
+                )
+            }
+            dimSelection(dimSelection)
+        })
+
+    }
+
 
     shiny::shinyApp(ui = ui, server = server)
 }

@@ -56,7 +56,7 @@
   `shiny::runApp()`.
 * `prepClusterSelectorData()` subsamples a `SingleCellExperiment` and builds the
   inputs required by `clusterSelector()`.
-* `plotSOMScatter()` and `plotScatterBJ()` provide ggplot2-based SOM and scatter
+* `plotSOMScatter()` and `plotCytoScatter()` provide ggplot2-based SOM and scatter
   visualizations.
 
 ## Bioconductor readiness

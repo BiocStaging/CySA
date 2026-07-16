@@ -21,11 +21,65 @@ test_that(".computeRelativeCounts() returns percentages", {
     expect_equal(unname(res), c(100, 100))
 })
 
-test_that(".buildFlowSOMPiePlot() returns NULL for invalid rs", {
+test_that(".validateClusterSelectorInputs() checks required inputs", {
     sce <- CySA_example_sce()
-    som_codes <- S4Vectors::metadata(sce)$SOM_codes
-    colsUsed <- S4Vectors::metadata(sce)$map$colsUsed
+    sce_bad <- sce
+    S4Vectors::metadata(sce_bad)$map <- NULL
 
-    expect_null(.buildFlowSOMPiePlot(som_codes, rs = integer(0), colsUsed))
-    expect_null(.buildFlowSOMPiePlot(som_codes, rs = 9999, colsUsed))
+    expect_error(
+        clusterSelector(
+            sce = sce_bad,
+            sce_subsampled = sce_bad,
+            dList = list(c("marker1", "marker2")),
+            dend = stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
+            dendTable = data.frame(id = 1),
+            clusterPatientTable = table(c(1)),
+            somRasterData = data.frame(x = 1, y = 1, marker1 = 1)
+        ),
+        "colsUsed is required"
+    )
+})
+
+test_that(".validateClusterSelectorInputs() requires cluster_id and sample_id", {
+    sce <- CySA_example_sce()
+    sce_bad <- sce
+    SummarizedExperiment::colData(sce_bad)$cluster_id <- NULL
+
+    expect_error(
+        clusterSelector(
+            sce = sce_bad,
+            sce_subsampled = sce_bad,
+            dList = list(c("marker1", "marker2")),
+            dend = stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
+            dendTable = data.frame(id = 1),
+            clusterPatientTable = table(c(1)),
+            somRasterData = data.frame(x = 1, y = 1, marker1 = 1)
+        ),
+        "cluster_id.*colData"
+    )
+})
+
+test_that(".validateClusterSelectorInputs() requires dList with enough pairs", {
+    sce <- CySA_example_sce()
+    expect_error(
+        clusterSelector(
+            sce = sce,
+            sce_subsampled = sce,
+            dList = list(c("marker1", "marker2")),
+            nPlots = 6,
+            dend = stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
+            dendTable = data.frame(id = 1),
+            clusterPatientTable = table(c(1)),
+            somRasterData = data.frame(x = 1, y = 1, marker1 = 1)
+        ),
+        "dList.*at least"
+    )
+})
+
+test_that(".buildSOMCodes() adds missing markers to SOM_codes", {
+    sce <- CySA_example_sce()
+    S4Vectors::metadata(sce)$SOM_codes <- S4Vectors::metadata(sce)$SOM_codes[, 1:6, drop = FALSE]
+    sce <- .buildSOMCodes(sce)
+
+    expect_true(all(rownames(sce) %in% colnames(S4Vectors::metadata(sce)$SOM_codes)))
 })

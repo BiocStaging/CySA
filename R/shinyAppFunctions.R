@@ -23,6 +23,9 @@ safe_event_data <- function(event, source = "all", verbose = FALSE) {
     )
 }
 
+# Alias with dot prefix used by extracted server helpers.
+.safeEventData <- safe_event_data
+
 # quiet_ggplotly ----
 # Wrapper around ggplotly that suppresses the harmless ggplot2 warning about
 # the customdata aesthetic, which is consumed by plotly after conversion.
@@ -31,7 +34,10 @@ quiet_ggplotly <- function(p, ...) {
         ggplotly(p, ...),
         warning = function(w) {
             msg <- conditionMessage(w)
-            if (grepl("Ignoring unknown aesthetics: customdata", msg)) {
+            if (grepl("unknown aesthetics.*(customdata|key)", msg, ignore.case = TRUE) ||
+                grepl("don't have these attributes.*colour",  msg, ignore.case = TRUE) ||
+                grepl("Aspect ratios aren't yet implemented", msg, ignore.case = TRUE) ||
+                grepl("has yet to be implemented in plotly",  msg, ignore.case = TRUE)) {
                 invokeRestart("muffleWarning")
             }
         }
@@ -117,19 +123,19 @@ countBarPlotFunc <- function(rs, clusterPatientTable, cst, sce, outputList, grou
 # Prefer .computeRelativeCounts() in new code.
 compute_relative_counts <- function(clusterPatientTable, rs, relativeToCol, expInfo, outputList) {
     switch(relativeToCol,
-        "none" = rowSums(clusterPatientTable[, rs, drop = FALSE]) /
-            rowSums(clusterPatientTable[, , drop = FALSE]) * 100,
-        {
-            if (relativeToCol %in% colnames(expInfo)) {
-                rowSums(clusterPatientTable[, rs, drop = FALSE]) /
-                    expInfo[rownames(clusterPatientTable), relativeToCol] * 100
-            } else if (relativeToCol %in% names(outputList)) {
-                rowSums(clusterPatientTable[, rs, drop = FALSE]) /
-                    rowSums(clusterPatientTable[, outputList[[relativeToCol]], drop = FALSE]) * 100
-            } else {
-                stop("relativeToCol '", relativeToCol, "' not found")
-            }
-        }
+           "none" = rowSums(clusterPatientTable[, rs, drop = FALSE]) /
+               rowSums(clusterPatientTable[, , drop = FALSE]) * 100,
+           {
+               if (relativeToCol %in% colnames(expInfo)) {
+                   rowSums(clusterPatientTable[, rs, drop = FALSE]) /
+                       expInfo[rownames(clusterPatientTable), relativeToCol] * 100
+               } else if (relativeToCol %in% names(outputList)) {
+                   rowSums(clusterPatientTable[, rs, drop = FALSE]) /
+                       rowSums(clusterPatientTable[, outputList[[relativeToCol]], drop = FALSE]) * 100
+               } else {
+                   stop("relativeToCol '", relativeToCol, "' not found")
+               }
+           }
     )
 }
 
@@ -307,13 +313,21 @@ plotViolinFunc <- function(sce, somCodesName = "SOM_codes", upsetSelection, outp
         wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
         wide$somNode <- factor(rows, levels = seq_len(nNodes))
         long <- tidyr::pivot_longer(wide,
-            cols = markers,
-            names_to = "marker", values_to = "expr"
+                                    cols = markers,
+                                    names_to = "marker", values_to = "expr"
         )
         long$grpName <- na
         long
     })
     data <- data.table::rbindlist(parts)
+    if (nrow(data) == 0) {
+        return(
+            ggplot2::ggplot() +
+                ggplot2::theme_void() +
+                ggplot2::labs(title = "No groups with \u2265 2 SOM nodes selected")
+        )
+    }
+
     if (nrow(data) > 0) {
         data$marker <- factor(data$marker, levels = markers)
         data$grpName <- factor(data$grpName, levels = upsetSelection)
@@ -356,7 +370,7 @@ buildProjectionDf <- function(pp1, plotIdx, dimSelection, sce) {
     pg <- ggplot_build(pp1)
     df <- pg$data[[1]][, c("x", "y", "label")]
     df2 <- dplyr::left_join(S4Vectors::metadata(sce)$SOM_stats, df,
-        by = dplyr::join_by(id == label)
+                            by = dplyr::join_by(id == label)
     )
     df2 <- df2[order(df2$id), ]
     df2[is.na(df2)] <- 0
@@ -376,76 +390,75 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
         df$id <- seq_len(nrow(df))
         df <- dplyr::left_join(df, S4Vectors::metadata(sce)$SOM_stats, by = "id")
     }
-    # Normalise SOM_stats column names to what the tooltip expects.
-    if ("n" %in% names(df) && !"N" %in% names(df)) df$N <- df$n
-    if ("rdQu" %in% names(df) && !"thrdQu" %in% names(df)) df$thrdQu <- df$rdQu
+    df <- df[order(df$id), ]   # row i == SOM node i  →  pointNumber+1 fallback works
+
+    if ("n"       %in% names(df) && !"N"      %in% names(df)) df$N      <- df$n
+    if ("rdQu"    %in% names(df) && !"thrdQu" %in% names(df)) df$thrdQu <- df$rdQu
     if ("thirdQu" %in% names(df) && !"thrdQu" %in% names(df)) df$thrdQu <- df$thirdQu
     df$cluster <- df$id
-    # N, mean, thrdQu, max are already in df from SOM_stats
-    nGrps <- 1
-    if (length(colorbyGroups) < 1) {
-        colGrp <- "lightblue"
-        sl <- FALSE
-    } else {
-        df$colGrp <- ""
+
+    nGrps  <- 1L
+    sl     <- FALSE
+    if (length(colorbyGroups) >= 1L) {
+        df$colGrp <- "other"
         for (cg in colorbyGroups) {
-            df$colGrp[df$cluster %in% outputList[[cg]]] <- paste(df$colGrp[df$cluster %in% outputList[[cg]]], cg)
-        }
-        df$colGrp[df$colGrp == ""] <- "other"
-        df$colGrp <- factor(df$colGrp)
-        sl <- TRUE
-        nGrps <- length(levels(df$colGrp))
-        nb.cols <- nGrps + 1
-        mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nb.cols)
-    }
-    # browser()
-    p3 <- withCallingHandlers(
-        ggplot(
-            data = df,
-            aes(
-                x = .data[[colN[1]]], y = .data[[colN[2]]],
-                text = paste(
-                    "cluster: ", cluster, "<br>N cells: ", N, "<br>mean: ",
-                    format(mean, digits = 2), "<br>3rd Q: ",
-                    format(thrdQu, digits = 2), "<br>max: ",
-                    format(max, digits = 2)
-                ),
-                customdata = seq_len(nrow(df))
+            mask <- df$cluster %in% outputList[[cg]]
+            df$colGrp[mask] <- ifelse(
+                df$colGrp[mask] == "other",
+                cg,
+                paste(df$colGrp[mask], cg)   # multi-group nodes get combined label
             )
-        ) +
-            if (nGrps == 1) {
-                geom_point(show.legend = sl, color = "lightblue")
-            } else {
-                list(
-                    geom_point(show.legend = sl, aes(color = colGrp)),
-                    scale_color_manual(values = mycolors[seq_len(nGrps)])
-                )
-            } +
-            geom_point(
-                data = df[rs, ],
-                aes(
-                    x = .data[[colN[1]]],
-                    y = .data[[colN[2]]],
-                    customdata = rs
-                ),
-                color = "red",
-                size = 0.3
-            ) +
-            theme_minimal() +
-            theme(legend.position = "bottom") +
-            guides(color = guide_legend(nrow = as.integer(nGrps / 3 + 1), title = "")),
-        warning = function(w) {
-            msg <- conditionMessage(w)
-            if (grepl("Ignoring unknown aesthetics: customdata", msg)) {
-                invokeRestart("muffleWarning")
-            }
         }
+        df$colGrp <- factor(df$colGrp)
+        sl    <- TRUE
+        nGrps <- length(levels(df$colGrp))
+        mycolors <- colorRampPalette(brewer.pal(8, "Set2"))(nGrps + 1L)
+    }
+
+    rs_int      <- as.integer(rs)
+    df_selected <- df[df$id %in% rs_int, , drop = FALSE]
+
+    # --- Build incrementally: fixes the if/else operator-precedence bug ---
+    p3 <- ggplot(
+        data = df,
+        aes(
+            x    = .data[[colN[1]]],
+            y    = .data[[colN[2]]],
+            key  = id,                  # preserved by ggplotly → d$key in event_data
+            text = paste(
+                "cluster:", cluster, "<br>N cells:", N, "<br>mean:",
+                format(mean,   digits = 2), "<br>3rd Q:",
+                format(thrdQu, digits = 2), "<br>max:",
+                format(max,    digits = 2)
+            )
+        )
     )
 
-    return(p3)
+    # Color layer (was previously merged into the + chain → lost when nGrps > 1)
+    if (nGrps == 1L) {
+        p3 <- p3 + geom_point(color = "lightblue", show.legend = FALSE, na.rm = TRUE)
+    } else {
+        p3 <- p3 +
+            geom_point(aes(color = colGrp), show.legend = sl, na.rm = TRUE) +
+            scale_color_manual(values = mycolors[seq_len(nGrps)])
+    }
+
+    # Red overlay for selected nodes (was previously absorbed into else branch)
+    if (nrow(df_selected) > 0L) {
+        p3 <- p3 + geom_point(
+            data        = df_selected,
+            mapping     = aes(x = .data[[colN[1]]], y = .data[[colN[2]]]),
+            color       = "red",
+            size        = 0.8,
+            inherit.aes = FALSE,
+            na.rm       = TRUE
+        )
+    }
+
+    p3 + theme_minimal() +
+        theme(legend.position = "bottom") +
+        guides(color = guide_legend(nrow = as.integer(nGrps / 3L + 1L), title = ""))
 }
-
-
 plotViolin2Func <- function(sce, somCodesName = "SOM_codes", violinSelection, upsetSelection, outputList) {
     somCodes <- sce@metadata[[somCodesName]]
     markers <- colnames(somCodes)
@@ -463,13 +476,21 @@ plotViolin2Func <- function(sce, somCodesName = "SOM_codes", violinSelection, up
         wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
         wide$somNode <- factor(rows, levels = seq_len(nNodes))
         long <- tidyr::pivot_longer(wide,
-            cols = markers,
-            names_to = "marker", values_to = "expr"
+                                    cols = markers,
+                                    names_to = "marker", values_to = "expr"
         )
         long$grpName <- na
         long
     })
     data <- data.table::rbindlist(parts)
+    if (nrow(data) == 0) {
+        return(
+            ggplot2::ggplot() +
+                ggplot2::theme_void() +
+                ggplot2::labs(title = "No groups with \u2265 2 SOM nodes selected")
+        )
+    }
+
     if (nrow(data) > 0) {
         data$marker <- factor(data$marker, levels = markers)
         data$grpName <- factor(data$grpName, levels = upsetSelection)
@@ -520,33 +541,33 @@ upsetPlotFunc <- function(upsetSelection, outputList, sce) {
     grpSoms <- lapply(outputList[upsetSelection], length) %>% unlist()
     top_ha <- ComplexHeatmap::HeatmapAnnotation(
         "cell #" = ComplexHeatmap::anno_barplot(ncells,
-            add_numbers = TRUE,
-            gp = grid::gpar(fill = "black"), width = grid::unit(4, "cm")
+                                                add_numbers = TRUE,
+                                                gp = grid::gpar(fill = "black"), width = grid::unit(4, "cm")
         ),
         "som #" = ComplexHeatmap::anno_barplot(ComplexHeatmap::comb_size(cm),
-            add_numbers = TRUE,
-            gp = grid::gpar(fill = "black"), width = grid::unit(4, "cm")
+                                               add_numbers = TRUE,
+                                               gp = grid::gpar(fill = "black"), width = grid::unit(4, "cm")
         ),
         gap = grid::unit(2, "mm"), annotation_name_side = "left", annotation_name_rot = 0
     )
 
     side_ha <- ComplexHeatmap::rowAnnotation(
         "som #" = ComplexHeatmap::anno_barplot(grpSoms,
-            add_numbers = TRUE,
-            gp = grid::gpar(fill = NULL), width = grid::unit(3, "cm")
+                                               add_numbers = TRUE,
+                                               gp = grid::gpar(fill = NULL), width = grid::unit(3, "cm")
         ),
         "cell #" = ComplexHeatmap::anno_barplot(grpCells,
-            add_numbers = TRUE,
-            gp = grid::gpar(fill = NULL), width = grid::unit(3, "cm")
+                                                add_numbers = TRUE,
+                                                gp = grid::gpar(fill = NULL), width = grid::unit(3, "cm")
         ),
         gap = grid::unit(2, "mm"), annotation_name_rot = 0
     )
     ComplexHeatmap::UpSet(cm,
-        comb_order = order(
-            ComplexHeatmap::comb_degree(cm),
-            -ComplexHeatmap::comb_size(cm)
-        ),
-        top_annotation = top_ha,
-        right_annotation = side_ha
+                          comb_order = order(
+                              ComplexHeatmap::comb_degree(cm),
+                              -ComplexHeatmap::comb_size(cm)
+                          ),
+                          top_annotation = top_ha,
+                          right_annotation = side_ha
     )
 }
