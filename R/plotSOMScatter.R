@@ -207,7 +207,7 @@ plotSOMScatter <- function(x, chs, metaSlot = "SOM_codes", pointSize = "n",
         y = rlang::sym(chs[2])
     )
     if (!is.null(pointSize)) aes_args$size <- rlang::sym(pointSize)
-    if (!is.null(col_var)) aes_args$colour <- rlang::sym(col_var)
+    if (!is.null(col_var)) aes_args$color <- rlang::sym(col_var)
 
     p1 <- ggplot2::ggplot(df, do.call(ggplot2::aes, aes_args)) + geom
 

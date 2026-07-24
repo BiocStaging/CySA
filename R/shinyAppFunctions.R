@@ -35,7 +35,6 @@ quiet_ggplotly <- function(p, ...) {
         warning = function(w) {
             msg <- conditionMessage(w)
             if (grepl("unknown aesthetics.*(customdata|key)", msg, ignore.case = TRUE) ||
-                grepl("don't have these attributes.*colour",  msg, ignore.case = TRUE) ||
                 grepl("Aspect ratios aren't yet implemented", msg, ignore.case = TRUE) ||
                 grepl("has yet to be implemented in plotly",  msg, ignore.case = TRUE)) {
                 invokeRestart("muffleWarning")
