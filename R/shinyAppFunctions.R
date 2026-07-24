@@ -46,10 +46,18 @@ quiet_ggplotly <- function(p, ...) {
 # highlight_df = function ----
 highlight_df <- function(x, y, rs, somCodesName = "SOM_codes", metaD = NULL) {
     if (is.null(metaD)) stop("'metaD' must be provided")
+    if (is.null(rs) || length(rs) == 0L) return(data.frame(x = numeric(0), y = numeric(0), id = integer(0)))
+
+    # Filter out NA and out-of-bounds indices
+    somCodes <- metaD[[somCodesName]]
+    rs_valid <- rs[!is.na(rs) & rs > 0L & rs <= nrow(somCodes)]
+
+    if (length(rs_valid) == 0L) return(data.frame(x = numeric(0), y = numeric(0), id = integer(0)))
+
     data.frame(
-        x = metaD[[somCodesName]][rs, x],
-        y = metaD[[somCodesName]][rs, y],
-        id = rs
+        x = somCodes[rs_valid, x],
+        y = somCodes[rs_valid, y],
+        id = rs_valid
     )
 }
 
@@ -251,20 +259,24 @@ somPlot <- function(pp1, plotIdx, rs, colorbyGroups, showGroups,
     }
     if (is.null(p3)) return(NULL)
 
-    if (!is.null(xlim) && !is.null(ylim)) {
-        p3 <- p3 + xlim(xlim) + ylim(ylim)
-    } else if (is.null(dimSelection[[plotIdx]]$xzoom[1])) {
-        p3 <- p3 +
-            xlim(c(as.numeric(dimSelection[[plotIdx]]$xlim[1]),
-                   as.numeric(dimSelection[[plotIdx]]$xlim[2]))) +
-            ylim(c(as.numeric(dimSelection[[plotIdx]]$ylim[1]),
-                   as.numeric(dimSelection[[plotIdx]]$ylim[2])))
-    } else {
+    # Apply zoom limits if set by user, otherwise use provided limits or defaults
+    if (!is.null(dimSelection[[plotIdx]]$xzoom[1])) {
+        # User has zoomed - use zoom limits
         p3 <- p3 +
             xlim(c(as.numeric(dimSelection[[plotIdx]]$xzoom[1]),
                    as.numeric(dimSelection[[plotIdx]]$xzoom[2]))) +
             ylim(c(as.numeric(dimSelection[[plotIdx]]$yzoom[1]),
                    as.numeric(dimSelection[[plotIdx]]$yzoom[2])))
+    } else if (!is.null(xlim) && !is.null(ylim)) {
+        # Custom limits passed (e.g., from quantile-based auto-zoom for SOM 2D main)
+        p3 <- p3 + xlim(xlim) + ylim(ylim)
+    } else if (!is.null(dimSelection[[plotIdx]]$xlim) && !is.null(dimSelection[[plotIdx]]$ylim)) {
+        # Default axis limits from dimSelection
+        p3 <- p3 +
+            xlim(c(as.numeric(dimSelection[[plotIdx]]$xlim[1]),
+                   as.numeric(dimSelection[[plotIdx]]$xlim[2]))) +
+            ylim(c(as.numeric(dimSelection[[plotIdx]]$ylim[1]),
+                   as.numeric(dimSelection[[plotIdx]]$ylim[2])))
     }
 
     # Use explicit source when supplied; otherwise derive from plot index (backward-compat).
