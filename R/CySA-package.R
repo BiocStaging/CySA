@@ -93,6 +93,10 @@
 #' @importFrom utils str
 "_PACKAGE"
 
+# Set maximum plot dimension to prevent memory issues with large plots
+# This is used by ragg::agg_png() and related functions
+options(agg.max_dim = 10000)
+
 #' Default cluster color palette
 #'
 #' Returns the default 20-color palette used by CySA for cluster

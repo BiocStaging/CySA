@@ -583,13 +583,20 @@
         if (is.null(ncol_val) || is.null(size_val)) return(NULL)
         n <- length(rs)
         if (n < 1L) return(NULL)
+
+        # Limit maximum dimensions to prevent PNG crash (max 50000px)
+        ncol_val <- min(ncol_val, 20L)
+        size_val <- min(size_val, 300L)
+
         rows <- ceiling(n / ncol_val)
-        width <- paste0(size_val, "px")
-        height <- paste0(size_val, "px")
+        max_dim <- 8000L  # Conservative limit to stay under 50000px
+        total_width <- min(ncol_val * size_val, max_dim)
+        total_height <- min(rows * size_val, max_dim)
+
         shiny::plotOutput(
             "flowSOMPie",
-            width = paste0(ncol_val * size_val, "px"),
-            height = paste0(rows * size_val, "px")
+            width = paste0(total_width, "px"),
+            height = paste0(total_height, "px")
         )
     })
 
