@@ -1,4 +1,4 @@
-#' @rdname plotScatter
+#' @rdname plotSOMScatter
 #' @title Scatter plot
 #'
 #' @description Bivariate scatter plots including visualization of

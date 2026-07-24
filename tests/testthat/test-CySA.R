@@ -134,6 +134,7 @@ test_that("plotSOMScatter() returns NULL when < 2 valid channels remain", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that("plotCytoScatter() returns a ggplot for valid channels", {
+    skip_if_not_installed("KernSmooth")
     sce <- small_sce()
     chs <- rownames(sce)[seq_len(2)]
     p   <- plotCytoScatter(sce, chs = chs)
@@ -149,6 +150,7 @@ test_that("plotCytoScatter() errors on unknown channels", {
 })
 
 test_that("plotCytoScatter() warns when gate is non-NULL", {
+    skip_if_not_installed("KernSmooth")
     sce <- small_sce()
     chs <- rownames(sce)[seq_len(2)]
     expect_warning(
@@ -158,6 +160,7 @@ test_that("plotCytoScatter() warns when gate is non-NULL", {
 })
 
 test_that("plotCytoScatter() works when color_by is NULL (density mode)", {
+    skip_if_not_installed("KernSmooth")
     sce <- small_sce()
     chs <- rownames(sce)[seq_len(2)]
     p   <- plotCytoScatter(sce, chs = chs, color_by = NULL)

@@ -37,7 +37,7 @@ pkgdown::build_site()
 - `R/clusterSelector.R` — main Shiny app factory (`clusterSelector()`), ~1900 lines.
 - `R/shinyAppFunctions.R` — helper functions used by the app.
 - `R/prepClusterSelector.R` — `prepClusterSelectorData()` for subsampling and pre-computation.
-- `R/plotSOMScatter.R` and `R/plotScatterBJ.R` — plotting helpers copied from CyDa.
+- `R/plotSOMScatter.R` and `R/plotCytoScatter.R` — plotting helpers copied from CyDa.
 - `R/CySA-package.R` — central package imports and `CySA_default_cluster_cols()`.
 - `inst/dev/` — working analysis notes (`claude.discussion.md`), not installed.
 

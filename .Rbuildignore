@@ -20,6 +20,7 @@
 ^profile1\.Rprofvis$
 ^Rplots\.pdf$
 ^test\.app\.R$
+^app\.R$
 ^\.\.Rcheck$
 ^CySA\.Rcheck$
 ^CySA\.BiocCheck$
@@ -27,3 +28,6 @@
 ^.Rhistory$
 ^Julia.*$
 ^inst/dev$
+^2Dos.md$
+CLAUDE_STATUS.md
+vignettes/introduction.Rmd

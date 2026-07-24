@@ -118,6 +118,12 @@ prepClusterSelectorData <- function(sce,
 
             sce_subsampled <- do.call(SummarizedExperiment::cbind, sampling_indices)
 
+            # Ensure downstream helpers see a factor cluster_id with all node levels.
+            sce_subsampled$cluster_id <- factor(
+                as.character(SingleCellExperiment::colData(sce_subsampled)$cluster_id),
+                levels = seq_len(nrow(S4Vectors::metadata(sce)[[somCodesName]]))
+            )
+
             if (!is.null(cache_file)) {
                 save(sce_subsampled, file = cache_file)
             }
@@ -270,7 +276,7 @@ prepClusterSelectorData <- function(sce,
 
     result <- lapply(seq_len(n_clusters), function(lv) {
         if (verbose && lv %% 100 == 0) {
-            cat(file = stderr(), "cluster ", lv, format(Sys.time(), "%a %b %d %X %Y"), "\n")
+            message("cluster ", lv, " ", format(Sys.time(), "%a %b %d %X %Y"))
         }
         idx <- idx_by_cluster[[as.character(lv)]]
         if (is.null(idx) || length(idx) == 0) {

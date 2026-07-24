@@ -54,6 +54,6 @@ Generates a 2-D scatter / density / colored point plot for a
 }
 \examples{
 sce <- CySA_example_sce()
-plotScatter(sce, chs = c("marker1", "marker2"))
+plotCytoScatter(sce, chs = c("marker1", "marker2"))
 
 }

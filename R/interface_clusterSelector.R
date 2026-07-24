@@ -3,7 +3,7 @@
 # Refactored for Bioconductor with assistance from the opencode AI coding
 # assistant. All code is redistributed under the package LICENSE.
 
-# ui-helpers.R ----
+# interface_clusterSelector.R ----
 # UI construction helpers for clusterSelector(). Splitting the dashboard into
 # small builder functions makes the main factory easier to read and test.
 

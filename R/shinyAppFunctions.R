@@ -227,65 +227,56 @@ ggsomPlot <- function(pp1, plotIdx, rs, dimSelection, somCodesName = "SOM_codes"
     return(p3)
 }
 
-somPlot <- function(pp1, plotIdx, rs, colorbyGroups, showGroups, dimSelection = NULL, somCodesName = "SOM_codes", sce, metaD = S4Vectors::metadata(sce), outputList = list(), projectionDf = NULL, xlim = NULL, ylim = NULL) {
-    if (is.null(pp1)) {
-        return(NULL)
-    }
+somPlot <- function(pp1, plotIdx, rs, colorbyGroups, showGroups,
+                    dimSelection = NULL, somCodesName = "SOM_codes",
+                    sce, metaD = S4Vectors::metadata(sce),
+                    outputList = list(), projectionDf = NULL,
+                    xlim = NULL, ylim = NULL,
+                    source = NULL) {           # <-- new parameter
+    if (is.null(pp1)) return(NULL)
 
-    # cp =load(file = "/pasteur/appa/scratch/bernd/dev.RData")
-    # if(plotIdx==1){
-    #   # browser()
-    #   save(file = "/pasteur/appa/scratch/bernd/dev.RData", list = c("pp1", "plotIdx", "rs", "dimSelection", "colorbyGroups",
-    #                                                                 "showGroups"))
-    # }
     if (showGroups) {
         req(projectionDf)
-        p3 <- drawProjection(projectionDf, rs, colorbyGroups = colorbyGroups, sce = sce, outputList = outputList)
+        p3 <- drawProjection(projectionDf, rs,
+                             colorbyGroups = colorbyGroups,
+                             sce = sce, outputList = outputList)
     } else {
         p3 <- pp1 + geom_point(
-            data = highlight_df(dimSelection[[plotIdx]]$dims[1], dimSelection[[plotIdx]]$dims[2], rs, somCodesName, metaD = metaD),
-            aes(x = x, y = y),
-            color = "red",
-            size = 0.3
+            data = highlight_df(
+                dimSelection[[plotIdx]]$dims[1],
+                dimSelection[[plotIdx]]$dims[2],
+                rs, somCodesName, metaD = metaD
+            ),
+            aes(x = x, y = y), color = "red", size = 0.3
         )
     }
+    if (is.null(p3)) return(NULL)
 
-    if (is.null(p3)) {
-        return(NULL)
-    }
     if (!is.null(xlim) && !is.null(ylim)) {
         p3 <- p3 + xlim(xlim) + ylim(ylim)
     } else if (is.null(dimSelection[[plotIdx]]$xzoom[1])) {
         p3 <- p3 +
-            xlim(c(
-                dimSelection[[plotIdx]]$xlim[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$xlim[2] %>% as.numeric()
-            )) +
-            ylim(c(
-                dimSelection[[plotIdx]]$ylim[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$ylim[2] %>% as.numeric()
-            ))
+            xlim(c(as.numeric(dimSelection[[plotIdx]]$xlim[1]),
+                   as.numeric(dimSelection[[plotIdx]]$xlim[2]))) +
+            ylim(c(as.numeric(dimSelection[[plotIdx]]$ylim[1]),
+                   as.numeric(dimSelection[[plotIdx]]$ylim[2])))
     } else {
         p3 <- p3 +
-            xlim(c(
-                dimSelection[[plotIdx]]$xzoom[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$xzoom[2] %>% as.numeric()
-            )) +
-            ylim(c(
-                dimSelection[[plotIdx]]$yzoom[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$yzoom[2] %>% as.numeric()
-            ))
+            xlim(c(as.numeric(dimSelection[[plotIdx]]$xzoom[1]),
+                   as.numeric(dimSelection[[plotIdx]]$xzoom[2]))) +
+            ylim(c(as.numeric(dimSelection[[plotIdx]]$yzoom[1]),
+                   as.numeric(dimSelection[[plotIdx]]$yzoom[2])))
     }
-    # browser()
-    if (plotIdx > 5) plotIdx <- 6
 
+    # Use explicit source when supplied; otherwise derive from plot index (backward-compat).
+    if (plotIdx > 5L) plotIdx <- 6L
+    plot_source <- if (!is.null(source)) source else paste0("somData", plotIdx)
 
-    quiet_ggplotly(p3, source = paste0("somData", plotIdx), tooltip = "") %>%
+    quiet_ggplotly(p3, source = plot_source, tooltip = "") %>%
         layout(showlegend = FALSE, dragmode = "select") %>%
         event_register("plotly_selected") %>%
         event_register("plotly_relayout")
 }
-
 
 tsneFunc <- function(dimRedSelection, perplexity, sce, somCodesName = "SOM_codes") {
     dimRedCols <- dimRedSelection
@@ -364,33 +355,94 @@ plotViolinFunc <- function(sce, somCodesName = "SOM_codes", upsetSelection, outp
 }
 
 
-# Build a data frame of projected SOM coordinates plus SOM_stats, cached per view.
-buildProjectionDf <- function(pp1, plotIdx, dimSelection, sce) {
-    req(pp1, dimSelection)
-    pg <- ggplot_build(pp1)
-    df <- pg$data[[1]][, c("x", "y", "label")]
-    df2 <- dplyr::left_join(S4Vectors::metadata(sce)$SOM_stats, df,
-                            by = dplyr::join_by(id == label)
+#' Build a Projection Data Frame for drawProjection
+#'
+#' Constructs the per-SOM-node data frame that \code{drawProjection} expects:
+#' the two requested channel columns come first, followed by all SOM_stats
+#' columns.  Reads coordinates directly from \code{metadata(sce)[[somCodesName]]}
+#' instead of parsing \code{ggplot_build()} output, which is both faster and
+#' independent of which aesthetics the base plot happens to expose.
+#'
+#' @param pp1 Base ggplot object (kept in signature for call-site compatibility;
+#'   no longer used internally).
+#' @param plotIdx Index into \code{dimSelection}.
+#' @param dimSelection List of per-plot dimension specs.
+#' @param sce Full \code{SingleCellExperiment}.
+#' @param somCodesName Name of the SOM codes metadata slot
+#'   (default \code{"SOM_codes"}).
+#'
+#' @return A data frame or \code{NULL} on failure.
+#'
+#' @keywords internal
+buildProjectionDf <- function(pp1, plotIdx, dimSelection, sce,
+                              somCodesName = "SOM_codes") {
+    shiny::req(pp1, dimSelection)
+
+    ch_names  <- dimSelection[[plotIdx]]$dims
+    md        <- S4Vectors::metadata(sce)
+    som_codes <- md[[somCodesName]]
+    som_stats <- md[["SOM_stats"]]
+
+    ## ---- guard: required metadata slots ------------------------------------
+    if (is.null(som_codes)) {
+        warning("buildProjectionDf: '", somCodesName,
+                "' not found in metadata(sce).")
+        return(NULL)
+    }
+    if (is.null(som_stats)) {
+        warning("buildProjectionDf: 'SOM_stats' not found in metadata(sce).")
+        return(NULL)
+    }
+
+    ## ---- ensure SOM_stats has an id column ---------------------------------
+    if (!"id" %in% colnames(som_stats)) {
+        som_stats$id <- seq_len(nrow(som_stats))
+    }
+
+    ## ---- resolve channels --------------------------------------------------
+    available  <- colnames(som_codes)
+    missing_ch <- setdiff(ch_names, available)
+    if (length(missing_ch) > 0L) {
+        warning(
+            "buildProjectionDf: channel(s) not in SOM codes - falling back: ",
+            paste(missing_ch, collapse = ", ")
+        )
+        ## substitute with the first available channels
+        fallback <- head(available, 2L)
+        ch_names[!ch_names %in% available] <-
+            fallback[seq_along(missing_ch)]
+    }
+
+    ## ---- build coordinate data frame directly from SOM codes ---------------
+    ## Row i of som_codes corresponds to SOM node i.
+    coord_df <- data.frame(
+        id = seq_len(nrow(som_codes)),
+        ch1 = som_codes[, ch_names[1L]],
+        ch2 = som_codes[, ch_names[2L]],
+        stringsAsFactors = FALSE,
+        check.names = FALSE
     )
+    colnames(coord_df)[colnames(coord_df) == "ch1"] <- ch_names[1L]
+    colnames(coord_df)[colnames(coord_df) == "ch2"] <- ch_names[2L]
+
+    ## ---- join with SOM stats -----------------------------------------------
+    df2 <- dplyr::left_join(som_stats, coord_df, by = "id")
     df2 <- df2[order(df2$id), ]
     df2[is.na(df2)] <- 0
-    ch_names <- dimSelection[[plotIdx]]$dims
-    colnames(df2)[colnames(df2) == "x"] <- ch_names[1]
-    colnames(df2)[colnames(df2) == "y"] <- ch_names[2]
-    # Coordinate columns must be first so drawProjection can locate them
+
+    ## ---- channel columns first (drawProjection reads names(df)[1:2]) -------
     coord_idx <- match(ch_names, names(df2))
     other_idx <- setdiff(seq_along(df2), coord_idx)
     df2 <- df2[, c(coord_idx, other_idx), drop = FALSE]
     df2
 }
-
 drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
     colN <- names(df)[seq_len(2)]
     if (!"id" %in% names(df)) {
         df$id <- seq_len(nrow(df))
         df <- dplyr::left_join(df, S4Vectors::metadata(sce)$SOM_stats, by = "id")
     }
-    df <- df[order(df$id), ]   # row i == SOM node i  →  pointNumber+1 fallback works
+    df <- df[order(df$id), ]   # row i == SOM node i  ->  pointNumber+1 fallback works
 
     if ("n"       %in% names(df) && !"N"      %in% names(df)) df$N      <- df$n
     if ("rdQu"    %in% names(df) && !"thrdQu" %in% names(df)) df$thrdQu <- df$rdQu
@@ -424,7 +476,7 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
         aes(
             x    = .data[[colN[1]]],
             y    = .data[[colN[2]]],
-            key  = id,                  # preserved by ggplotly → d$key in event_data
+            key  = id,                  # preserved by ggplotly -> d$key in event_data
             text = paste(
                 "cluster:", cluster, "<br>N cells:", N, "<br>mean:",
                 format(mean,   digits = 2), "<br>3rd Q:",
@@ -434,7 +486,7 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
         )
     )
 
-    # Color layer (was previously merged into the + chain → lost when nGrps > 1)
+    # Color layer (was previously merged into the + chain -> lost when nGrps > 1)
     if (nGrps == 1L) {
         p3 <- p3 + geom_point(color = "lightblue", show.legend = FALSE, na.rm = TRUE)
     } else {

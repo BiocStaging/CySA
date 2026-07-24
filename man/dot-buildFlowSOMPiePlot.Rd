@@ -4,7 +4,7 @@
 \alias{.buildFlowSOMPiePlot}
 \title{Build a FlowSOM Marker Pie Plot}
 \usage{
-.buildFlowSOMPiePlot(somCodes, rs, colsUsed)
+.buildFlowSOMPiePlot(somCodes, rs, colsUsed, ncol = NULL)
 }
 \arguments{
 \item{somCodes}{SOM codes matrix.}
@@ -12,12 +12,14 @@
 \item{rs}{Selected SOM node ids.}
 
 \item{colsUsed}{Marker names to include.}
+
+\item{ncol}{Number of columns passed to \code{facet_wrap}. \code{NULL}
+lets ggplot2 choose automatically.}
 }
 \value{
-A \code{ggplot} object or \code{NULL} when no markers are available.
+A \code{ggplot} object or \code{NULL}.
 }
 \description{
-Creates a faceted pie chart showing mean marker expression per selected SOM
-node.
+Build a FlowSOM Marker Pie Plot
 }
 \keyword{internal}

@@ -36,7 +36,7 @@ CySA_example_sce <- function(n_cells = 1000, n_nodes = 50, n_markers = 12) {
     cluster_ids <- rep(seq_len(n_nodes), length.out = n_cells)
     cd <- S4Vectors::DataFrame(
         sample_id = sample_ids,
-        cluster_id = cluster_ids
+        cluster_id = factor(cluster_ids, levels = seq_len(n_nodes))
     )
 
     som_codes <- matrix(

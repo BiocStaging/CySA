@@ -44,52 +44,58 @@
 
 #' Build a FlowSOM Marker Pie Plot
 #'
-#' Creates a faceted pie chart showing mean marker expression per selected SOM
-#' node.
-#'
 #' @param somCodes SOM codes matrix.
 #' @param rs Selected SOM node ids.
 #' @param colsUsed Marker names to include.
+#' @param ncol Number of columns passed to \code{facet_wrap}. \code{NULL}
+#'   lets ggplot2 choose automatically.
 #'
-#' @return A \code{ggplot} object or \code{NULL} when no markers are available.
-#'
+#' @return A \code{ggplot} object or \code{NULL}.
 #' @keywords internal
-.buildFlowSOMPiePlot <- function(somCodes, rs, colsUsed) {
+.buildFlowSOMPiePlot <- function(somCodes, rs, colsUsed, ncol = NULL) {
     rs <- as.integer(rs)
     rs <- rs[!is.na(rs)]
-    if (length(rs) < 1 || any(rs <= 0) || any(rs > nrow(somCodes))) {
+    if (length(rs) < 1L || any(rs <= 0L) || any(rs > nrow(somCodes))) {
         return(NULL)
     }
 
     markers <- intersect(colsUsed, colnames(somCodes))
-    if (length(markers) < 1) return(NULL)
+    if (length(markers) < 1L) return(NULL)
+
+    ## Validate ncol
+    if (!is.null(ncol)) {
+        ncol <- suppressWarnings(as.integer(ncol))
+        if (is.na(ncol) || ncol < 1L) ncol <- NULL
+    }
 
     expr <- as.data.frame(somCodes[rs, markers, drop = FALSE])
-    expr$cluster_id <- factor(as.character(rs), levels = unique(as.character(rs)))
+    expr$cluster_id <- factor(as.character(rs),
+                              levels = unique(as.character(rs)))
 
     long <- tidyr::pivot_longer(
         expr,
-        cols = tidyr::all_of(markers),
-        names_to = "marker",
+        cols      = tidyr::all_of(markers),
+        names_to  = "marker",
         values_to = "expression"
     )
     long$marker <- factor(long$marker, levels = markers)
 
-    n_markers <- length(markers)
     marker_cols <- grDevices::colorRampPalette(
-        RColorBrewer::brewer.pal(8, "Set2")
-    )(n_markers)
+        RColorBrewer::brewer.pal(8L, "Set2")
+    )(length(markers))
 
-    ggplot(long, aes(x = "", y = expression, fill = marker)) +
-        geom_bar(stat = "identity", width = 1) +
-        coord_polar("y") +
-        facet_wrap(~cluster_id) +
-        scale_fill_manual(values = marker_cols) +
-        theme_minimal() +
-        theme(
-            axis.text = element_blank(),
-            axis.title = element_blank(),
-            panel.grid = element_blank()
+    ggplot2::ggplot(long,
+                    ggplot2::aes(x = "", y = expression, fill = marker)
+    ) +
+        ggplot2::geom_bar(stat = "identity", width = 1L) +
+        ggplot2::coord_polar("y") +
+        ggplot2::facet_wrap(~cluster_id, ncol = ncol) +  # ncol = NULL → auto
+        ggplot2::scale_fill_manual(values = marker_cols) +
+        ggplot2::theme_minimal() +
+        ggplot2::theme(
+            axis.text    = ggplot2::element_blank(),
+            axis.title   = ggplot2::element_blank(),
+            panel.grid   = ggplot2::element_blank()
         )
 }
 

@@ -112,7 +112,10 @@
 .initializeOutputList <- function(outputList, clusterLevels) {
     outputList[["Rest"]] <- c()
     used <- unique(unlist(outputList))
-    all_levels <- clusterLevels
+    all_levels <- if (is.factor(clusterLevels)) levels(clusterLevels) else sort(unique(as.integer(clusterLevels)))
+    if (length(all_levels) == 0L) {
+        all_levels <- sort(unique(as.integer(clusterLevels)))
+    }
     outputList[["Rest"]] <- as.integer(all_levels[!all_levels %in% used])
 
     for (na in names(outputList)) {

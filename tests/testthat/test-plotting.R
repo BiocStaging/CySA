@@ -22,6 +22,7 @@ test_that("plotSOMScatter() works with more than two channels", {
 })
 
 test_that("plotCytoScatter() returns a ggplot object", {
+    skip_if_not_installed("KernSmooth")
     sce <- CySA_example_sce()
     p <- plotCytoScatter(x = sce, chs = c("marker1", "marker2"))
 
@@ -37,6 +38,7 @@ test_that("plotCytoScatter() errors on unknown channels", {
 })
 
 test_that("plotCytoScatter() respects facet_by when supplied", {
+    skip_if_not_installed("KernSmooth")
     sce <- CySA_example_sce()
     sce$group <- sample(c("A", "B"), ncol(sce), replace = TRUE)
     p <- plotCytoScatter(x = sce, chs = c("marker1", "marker2"), facet_by = "group")

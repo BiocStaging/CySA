@@ -1,11 +1,9 @@
 Package: CySA
 Title: Interactive Cluster Selector for Cytometry Data
-Version: 0.99.8
+Version: 0.99.9
 Authors@R:
     person("Bernd", "Jagla", , "bernd.jagla@pasteur.fr", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7696-0484"))
-Author: Bernd Jagla [aut, cre] (<https://orcid.org/0000-0002-7696-0484>)
-Maintainer: Bernd Jagla <bernd.jagla@pasteur.fr>
 Description: Provides an interactive Shiny application for selecting and
     visualizing clusters from flow cytometry data stored in
     SingleCellExperiment objects.
@@ -54,8 +52,10 @@ Imports:
     collapsibleTree,
     withr
 Suggests:
+    KernSmooth,
     knitr,
     rmarkdown,
+    shinytest2,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
 VignetteBuilder: knitr

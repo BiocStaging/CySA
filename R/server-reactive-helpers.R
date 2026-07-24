@@ -23,7 +23,7 @@
 #' @keywords internal
 .buildDimRedReactives <- function(input, metaD, sce, somCodesName) {
     tsne <- shiny::reactive({
-        .tsneFunc(input$dimRedSelection, input$perplexity, sce, somCodesName)
+        tsneFunc(input$dimRedSelection, input$perplexity, sce, somCodesName)
     }) %>%
         shiny::bindCache(input$dimRedSelection, input$perplexity) %>%
         shiny::debounce(1000)
