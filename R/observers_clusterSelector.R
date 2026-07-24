@@ -268,7 +268,7 @@
             .safeEventData(verbose = verbose, "plotly_selected", source = src),
             {
                 if (verbose) message(src, " touched")
-                rs <- shiny::isolate(rsUsed())
+                rs <- shiny::isolate(rsUsed_d())
                 if (is.null(rs)) return(NULL)
                 d <- .safeEventData(
                     verbose = verbose,

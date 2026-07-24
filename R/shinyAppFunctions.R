@@ -476,6 +476,7 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
             x    = .data[[colN[1]]],
             y    = .data[[colN[2]]],
             key  = id,                  # preserved by ggplotly -> d$key in event_data
+            customdata = id,            # fallback for plotly event_data
             text = paste(
                 "cluster:", cluster, "<br>N cells:", N, "<br>mean:",
                 format(mean,   digits = 2), "<br>3rd Q:",
@@ -498,7 +499,7 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
     if (nrow(df_selected) > 0L) {
         p3 <- p3 + geom_point(
             data        = df_selected,
-            mapping     = aes(x = .data[[colN[1]]], y = .data[[colN[2]]]),
+            mapping     = aes(x = .data[[colN[1]]], y = .data[[colN[2]]], customdata = id),
             color       = "red",
             size        = 0.8,
             inherit.aes = FALSE,
