@@ -32,4 +32,5 @@
 CLAUDE_STATUS.md
 vignettes/introduction.Rmd
 Julia.shiny.R
+local
 
