@@ -30,17 +30,26 @@ safe_event_data <- function(event, source = "all", verbose = FALSE) {
 # Wrapper around ggplotly that suppresses the harmless ggplot2 warning about
 # the customdata aesthetic, which is consumed by plotly after conversion.
 quiet_ggplotly <- function(p, ...) {
-    withCallingHandlers(
+    result <- withCallingHandlers(
         ggplotly(p, ...),
         warning = function(w) {
             msg <- conditionMessage(w)
             if (grepl("unknown aesthetics.*(customdata|key)", msg, ignore.case = TRUE) ||
                 grepl("Aspect ratios aren't yet implemented", msg, ignore.case = TRUE) ||
-                grepl("has yet to be implemented in plotly",  msg, ignore.case = TRUE)) {
+                grepl("has yet to be implemented in plotly",  msg, ignore.case = TRUE) ||
+                grepl("don't have these attributes",          msg, ignore.case = TRUE)) {
                 invokeRestart("muffleWarning")
             }
         }
     )
+    # Remove ggplot2-internal 'colour' attribute from every trace.
+    # It is left behind by ggplotly() and causes plotly to warn during
+    # rendering and event_register() validation.
+    result$x$data <- lapply(result$x$data, function(tr) {
+        tr[["colour"]] <- NULL
+        tr
+    })
+    result
 }
 
 # highlight_df = function ----
@@ -208,28 +217,30 @@ ggsomPlot <- function(pp1, plotIdx, rs, dimSelection, somCodesName = "SOM_codes"
         size = 0.3
     )
     if (!is.null(xlim) && !is.null(ylim)) {
-        p3 <- p3 + xlim(xlim) + ylim(ylim)
-    } else if (is.null(dimSelection[[plotIdx]]$xzoom[1])) {
+        p3 <- p3 + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)  # clips, not drops
 
-        p3 <- p3 +
-            xlim(c(
-                dimSelection[[plotIdx]]$xlim[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$xlim[2] %>% as.numeric()
-            )) +
-            ylim(c(
-                dimSelection[[plotIdx]]$ylim[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$ylim[2] %>% as.numeric()
-            ))
+    } else if (is.null(dimSelection[[plotIdx]]$xzoom[1])) {
+        p3 <- p3 + ggplot2::coord_cartesian(
+            xlim = c(
+                as.numeric(dimSelection[[plotIdx]]$xlim[1]),
+                as.numeric(dimSelection[[plotIdx]]$xlim[2])
+            ),
+            ylim = c(
+                as.numeric(dimSelection[[plotIdx]]$ylim[1]),
+                as.numeric(dimSelection[[plotIdx]]$ylim[2])
+            )
+        )
     } else {
-        p3 <- p3 +
-            xlim(c(
-                dimSelection[[plotIdx]]$xzoom[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$xzoom[2] %>% as.numeric()
-            )) +
-            ylim(c(
-                dimSelection[[plotIdx]]$yzoom[1] %>% as.numeric(),
-                dimSelection[[plotIdx]]$yzoom[2] %>% as.numeric()
-            ))
+        p3 <- p3 + ggplot2::coord_cartesian(
+            xlim = c(
+                as.numeric(dimSelection[[plotIdx]]$xzoom[1]),
+                as.numeric(dimSelection[[plotIdx]]$xzoom[2])
+            ),
+            ylim = c(
+                as.numeric(dimSelection[[plotIdx]]$yzoom[1]),
+                as.numeric(dimSelection[[plotIdx]]$yzoom[2])
+            )
+        )
     }
     return(p3)
 }
@@ -239,47 +250,70 @@ somPlot <- function(pp1, plotIdx, rs, colorbyGroups, showGroups,
                     sce, metaD = S4Vectors::metadata(sce),
                     outputList = list(), projectionDf = NULL,
                     xlim = NULL, ylim = NULL,
-                    source = NULL) {           # <-- new parameter
+                    source = NULL) {
     if (is.null(pp1)) return(NULL)
+
+    # Always use index 1 for dimSelection - the caller (somDataMain) passes a single-element list
+    dsIdx <- 1L
 
     if (showGroups) {
         req(projectionDf)
+        # drawProjection returns a ggplot object
         p3 <- drawProjection(projectionDf, rs,
                              colorbyGroups = colorbyGroups,
                              sce = sce, outputList = outputList)
+        # Apply zoom/limits to ggplot before conversion
+        if (!is.null(dimSelection[[dsIdx]]$xzoom[1])) {
+            p3 <- p3 + ggplot2::coord_cartesian(
+                xlim = c(as.numeric(dimSelection[[dsIdx]]$xzoom[1]),
+                       as.numeric(dimSelection[[dsIdx]]$xzoom[2])),
+                ylim = c(as.numeric(dimSelection[[dsIdx]]$yzoom[1]),
+                       as.numeric(dimSelection[[dsIdx]]$yzoom[2]))
+            )
+        } else if (!is.null(xlim) && !is.null(ylim)) {
+            p3 <- p3 + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
+        } else if (!is.null(dimSelection[[dsIdx]]$xlim) && !is.null(dimSelection[[dsIdx]]$ylim)) {
+            p3 <- p3 + ggplot2::coord_cartesian(
+                xlim = c(as.numeric(dimSelection[[dsIdx]]$xlim[1]),
+                       as.numeric(dimSelection[[dsIdx]]$xlim[2])),
+                ylim = c(as.numeric(dimSelection[[dsIdx]]$ylim[1]),
+                       as.numeric(dimSelection[[dsIdx]]$ylim[2]))
+            )
+        }
     } else {
+        # ggplot path - apply limits before converting to plotly
         p3 <- pp1 + geom_point(
             data = highlight_df(
-                dimSelection[[plotIdx]]$dims[1],
-                dimSelection[[plotIdx]]$dims[2],
+                dimSelection[[dsIdx]]$dims[1],
+                dimSelection[[dsIdx]]$dims[2],
                 rs, somCodesName, metaD = metaD
             ),
             aes(x = x, y = y), color = "red", size = 0.3
         )
+
+        # Apply zoom limits if set by user, otherwise use provided limits or defaults
+        if (!is.null(dimSelection[[dsIdx]]$xzoom[1])) {
+            p3 <- p3 + ggplot2::coord_cartesian(
+                xlim = c(as.numeric(dimSelection[[dsIdx]]$xzoom[1]),
+                       as.numeric(dimSelection[[dsIdx]]$xzoom[2])),
+                ylim = c(as.numeric(dimSelection[[dsIdx]]$yzoom[1]),
+                       as.numeric(dimSelection[[dsIdx]]$yzoom[2]))
+            )
+        } else if (!is.null(xlim) && !is.null(ylim)) {
+            p3 <- p3 + ggplot2::coord_cartesian(xlim = xlim, ylim = ylim)
+        } else if (!is.null(dimSelection[[dsIdx]]$xlim) && !is.null(dimSelection[[dsIdx]]$ylim)) {
+            p3 <- p3 + ggplot2::coord_cartesian(
+                xlim = c(as.numeric(dimSelection[[dsIdx]]$xlim[1]),
+                       as.numeric(dimSelection[[dsIdx]]$xlim[2])),
+                ylim = c(as.numeric(dimSelection[[dsIdx]]$ylim[1]),
+                       as.numeric(dimSelection[[dsIdx]]$ylim[2]))
+            )
+        }
     }
+
     if (is.null(p3)) return(NULL)
 
-    # Apply zoom limits if set by user, otherwise use provided limits or defaults
-    if (!is.null(dimSelection[[plotIdx]]$xzoom[1])) {
-        # User has zoomed - use zoom limits
-        p3 <- p3 +
-            xlim(c(as.numeric(dimSelection[[plotIdx]]$xzoom[1]),
-                   as.numeric(dimSelection[[plotIdx]]$xzoom[2]))) +
-            ylim(c(as.numeric(dimSelection[[plotIdx]]$yzoom[1]),
-                   as.numeric(dimSelection[[plotIdx]]$yzoom[2])))
-    } else if (!is.null(xlim) && !is.null(ylim)) {
-        # Custom limits passed (e.g., from quantile-based auto-zoom for SOM 2D main)
-        p3 <- p3 + xlim(xlim) + ylim(ylim)
-    } else if (!is.null(dimSelection[[plotIdx]]$xlim) && !is.null(dimSelection[[plotIdx]]$ylim)) {
-        # Default axis limits from dimSelection
-        p3 <- p3 +
-            xlim(c(as.numeric(dimSelection[[plotIdx]]$xlim[1]),
-                   as.numeric(dimSelection[[plotIdx]]$xlim[2]))) +
-            ylim(c(as.numeric(dimSelection[[plotIdx]]$ylim[1]),
-                   as.numeric(dimSelection[[plotIdx]]$ylim[2])))
-    }
-
-    # Use explicit source when supplied; otherwise derive from plot index (backward-compat).
+    # Use explicit source when supplied; otherwise derive from plot index
     if (plotIdx > 5L) plotIdx <- 6L
     plot_source <- if (!is.null(source)) source else paste0("somData", plotIdx)
 
@@ -462,6 +496,7 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
 
     nGrps  <- 1L
     sl     <- FALSE
+    mycolors <- NULL
     if (length(colorbyGroups) >= 1L) {
         df$colGrp <- "other"
         for (cg in colorbyGroups) {
@@ -482,46 +517,63 @@ drawProjection <- function(df, rs, colorbyGroups, sce, outputList = list()) {
     df_selected <- df[df$id %in% rs_int, , drop = FALSE]
 
     # --- Build incrementally: fixes the if/else operator-precedence bug ---
-    p3 <- ggplot(
-        data = df,
-        aes(
-            x    = .data[[colN[1]]],
-            y    = .data[[colN[2]]],
-            key  = id,                  # preserved by ggplotly -> d$key in event_data
-            customdata = id,            # fallback for plotly event_data
-            text = paste(
-                "cluster:", cluster, "<br>N cells:", N, "<br>mean:",
-                format(mean,   digits = 2), "<br>3rd Q:",
-                format(thrdQu, digits = 2), "<br>max:",
-                format(max,    digits = 2)
-            )
-        )
-    )
-
-    # Color layer (was previously merged into the + chain -> lost when nGrps > 1)
+    # For t-SNE/UMAP/PCA: use aes(color = colGrp) when grouping is requested.
+    # Note: This creates multiple traces in plotly, but selection works because
+    # the observer collects points from all traces via the 'key' aesthetic.
     if (nGrps == 1L) {
-        p3 <- p3 + geom_point(color = "lightblue", show.legend = FALSE, na.rm = TRUE)
+        p3 <- ggplot2::ggplot(
+            data = df,
+            ggplot2::aes(
+                x    = .data[[colN[1]]],
+                y    = .data[[colN[2]]],
+                key  = id,              # sufficient for selection
+                text = paste(
+                    "cluster:", cluster, "<br>N cells:", N, "<br>mean:",
+                    format(mean, digits = 2), "<br>3rd Q:",
+                    format(thrdQu, digits = 2), "<br>max:",
+                    format(max, digits = 2)
+                )
+            )
+        ) +
+            ggplot2::geom_point(
+                color = "lightblue", size = 1.5,
+                show.legend = FALSE, na.rm = TRUE
+            )
     } else {
-        p3 <- p3 +
-            geom_point(aes(color = colGrp), show.legend = sl, na.rm = TRUE) +
-            scale_color_manual(values = mycolors[seq_len(nGrps)])
+        p3 <- ggplot2::ggplot(
+            data = df,
+            ggplot2::aes(
+                x     = .data[[colN[1]]],
+                y     = .data[[colN[2]]],
+                color = colGrp,
+                key   = id,             # sufficient for selection
+                text  = paste(
+                    "cluster:", cluster, "<br>N cells:", N, "<br>mean:",
+                    format(mean, digits = 2), "<br>3rd Q:",
+                    format(thrdQu, digits = 2), "<br>max:",
+                    format(max, digits = 2)
+                )
+            )
+        ) +
+            ggplot2::geom_point(size = 1.5, na.rm = TRUE) +
+            ggplot2::scale_color_manual(values = mycolors, drop = FALSE)
     }
 
-    # Red overlay for selected nodes (was previously absorbed into else branch)
+    # Red overlay — no customdata needed, purely visual
     if (nrow(df_selected) > 0L) {
-        p3 <- p3 + geom_point(
+        p3 <- p3 + ggplot2::geom_point(
             data        = df_selected,
-            mapping     = aes(x = .data[[colN[1]]], y = .data[[colN[2]]], customdata = id),
+            mapping     = ggplot2::aes(
+                x = .data[[colN[1]]],
+                y = .data[[colN[2]]]   # customdata removed
+            ),
             color       = "red",
             size        = 0.8,
             inherit.aes = FALSE,
             na.rm       = TRUE
         )
     }
-
-    p3 + theme_minimal() +
-        theme(legend.position = "bottom") +
-        guides(color = guide_legend(nrow = as.integer(nGrps / 3L + 1L), title = ""))
+    p3
 }
 plotViolin2Func <- function(sce, somCodesName = "SOM_codes", violinSelection, upsetSelection, outputList) {
     somCodes <- sce@metadata[[somCodesName]]

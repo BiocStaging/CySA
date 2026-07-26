@@ -43,6 +43,51 @@ test_that("highlight_df returns expected columns", {
     expect_equal(df$id, c(1L, 3L))
 })
 
+
+test_that("highlight_df returns empty data.frame for NULL rs", {
+    metaD <- list(SOM_codes = matrix(
+        1:20, nrow = 5, ncol = 4,
+        dimnames = list(NULL, c("x", "y", "a", "b"))
+    ))
+    df <- highlight_df("x", "y", rs = NULL, metaD = metaD)
+    expect_equal(nrow(df), 0)
+    expect_named(df, c("x", "y", "id"))
+})
+
+
+test_that("highlight_df returns empty data.frame for empty rs", {
+    metaD <- list(SOM_codes = matrix(
+        1:20, nrow = 5, ncol = 4,
+        dimnames = list(NULL, c("x", "y", "a", "b"))
+    ))
+    df <- highlight_df("x", "y", rs = integer(0), metaD = metaD)
+    expect_equal(nrow(df), 0)
+})
+
+
+test_that("highlight_df filters out NA and out-of-bounds indices", {
+    metaD <- list(SOM_codes = matrix(
+        1:20, nrow = 5, ncol = 4,
+        dimnames = list(NULL, c("x", "y", "a", "b"))
+    ))
+    df <- highlight_df("x", "y", rs = c(NA, -1, 0, 3, 100), metaD = metaD)
+    expect_equal(nrow(df), 1)
+    expect_equal(df$id, c(3L))
+})
+
+
+test_that("highlight_df uses somCodesName argument", {
+    # Matrix is filled column-wise: [10, 12] in col 1, [11, 13] in col 2
+    metaD <- list(
+        SOM_codes = matrix(1:4, nrow = 2, dimnames = list(NULL, c("x", "y"))),
+        custom_codes = matrix(10:13, nrow = 2, dimnames = list(NULL, c("x", "y")))
+    )
+    df <- highlight_df("x", "y", rs = c(1L), somCodesName = "custom_codes", metaD = metaD)
+    # Row 1, col x = 10; Row 1, col y = 12 (column-wise filling)
+    expect_equal(df$x, 10)
+    expect_equal(df$y, 12)
+})
+
 # ══════════════════════════════════════════════════════════════════════════════
 # countBarPlotFunc
 # ══════════════════════════════════════════════════════════════════════════════
@@ -126,11 +171,12 @@ test_that("PercentBarPlotFunc respects group colouring", {
         nrow(S4Vectors::metadata(sce)$experiment_info)
     )
     cpt <- table(sample_id = sce$sample_id, cluster_id = sce$cluster_id)
-    p <- PercentBarPlotFunc(
+    expect_warning(
+        p <- PercentBarPlotFunc(
         sce = sce, relativeToCol = "none", clusterPatientTable = cpt,
         rs = c(1L, 2L), outputList = list(), group = NULL,
         groupsInput = list(group1 = "sample1", group2 = "sample2")
-    )
+    ), "NAs introduced by coercion")
     expect_s3_class(p, "ggplot")
 })
 
@@ -282,10 +328,11 @@ test_that("buildProjectionDf requires som_codes and SOM_stats", {
     S4Vectors::metadata(sce)$SOM_stats <- NULL
     dimSelection <- list(list(dims = c("marker1", "marker2")))
     # shiny::req() stops silently; verify the function does not return a data frame.
+    expect_warning(
     expect_error(
         buildProjectionDf(ggplot2::ggplot(), plotIdx = 1L, dimSelection = dimSelection, sce = sce),
         regexp = NA
-    )
+    ), "not found in metadata")
 })
 
 test_that("buildProjectionDf returns expected column order", {
@@ -299,6 +346,7 @@ test_that("buildProjectionDf returns expected column order", {
 test_that("drawProjection returns ggplot without colorbyGroups", {
     sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
     df <- buildProjectionDf(ggplot2::ggplot(), 1L, list(list(dims = c("marker1", "marker2"))), sce)
+
     p <- drawProjection(df, rs = c(1L, 2L), colorbyGroups = NULL, sce = sce)
     expect_s3_class(p, "ggplot")
 })
@@ -306,10 +354,11 @@ test_that("drawProjection returns ggplot without colorbyGroups", {
 test_that("drawProjection colours by groups when colorbyGroups supplied", {
     sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
     df <- buildProjectionDf(ggplot2::ggplot(), 1L, list(list(dims = c("marker1", "marker2"))), sce)
-    p <- drawProjection(
+
+        p <- drawProjection(
         df, rs = 1L, colorbyGroups = c("A"),
-        sce = sce, outputList = list(A = 1:2, B = 3:4)
-    )
+        sce = sce, outputList = list(A = 1:2, B = 3:4))
+
     expect_s3_class(p, "ggplot")
 })
 
@@ -331,10 +380,12 @@ test_that("plotViolinFunc returns ggplot with enough data", {
 test_that("plotViolinFunc returns placeholder when upsetSelection too short", {
     sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
     outputList <- list(A = c(1L, 2L), B = c(3L, 4L))
+    expect_message(
     p <- plotViolinFunc(
         sce = sce, upsetSelection = "A", outputList = outputList,
         violinSelection = colnames(S4Vectors::metadata(sce)$SOM_codes)[1:2]
-    )
+    ),
+    "please check that all upsetSelection are in outputList:")
     expect_true(is.null(p) || inherits(p, "ggplot"))
 })
 
@@ -375,3 +426,4 @@ test_that("upsetPlotFunc returns ComplexHeatmap object for valid groups", {
     p <- upsetPlotFunc(names(outputList), outputList, sce)
     expect_s4_class(p, "Heatmap")
 })
+

@@ -321,11 +321,12 @@
     # t-SNE, UMAP, PCA plots.
     output$tsne <- plotly::renderPlotly({
         p3 <- tsnePlot()
+        shiny::req(p3)
         showLegend <- input$showlegend
         ret <- quiet_ggplotly(p3, source = "tsne", tooltip = "text")
         if (showLegend) {
             ret <- ret %>% plotly::layout(legend = list(
-                x = 0, y = -3, xanchor = "left", yanchor = "bottom", orientation = "h"
+                x = 0, y = -0.2, xanchor = "left", yanchor = "bottom", orientation = "h"
             ))
         } else {
             ret <- ret %>% plotly::layout(showlegend = FALSE)
@@ -338,11 +339,12 @@
 
     output$umap <- plotly::renderPlotly({
         p3 <- umapPlot()
+        shiny::req(p3)
         showLegend <- input$showlegend
         ret <- quiet_ggplotly(p3, source = "umap", tooltip = "text")
         if (showLegend) {
             ret <- ret %>% plotly::layout(legend = list(
-                x = 0, y = -3, xanchor = "left", yanchor = "bottom", orientation = "h"
+                x = 0, y = -0.2, xanchor = "left", yanchor = "bottom", orientation = "h"
             ))
         } else {
             ret <- ret %>% plotly::layout(showlegend = FALSE)
@@ -355,11 +357,12 @@
 
     output$pca <- plotly::renderPlotly({
         p3 <- pcaPlot()
+        shiny::req(p3)
         showLegend <- input$showlegend
         ret <- quiet_ggplotly(p3, source = "pca", tooltip = "text")
         if (showLegend) {
             ret <- ret %>% plotly::layout(legend = list(
-                x = 0, y = -3, xanchor = "left", yanchor = "bottom", orientation = "h"
+                x = 0, y = -0.2, xanchor = "left", yanchor = "bottom", orientation = "h"
             ))
         } else {
             ret <- ret %>% plotly::layout(showlegend = FALSE)
@@ -379,15 +382,18 @@
         dd <- dendPlotlyData()
         rs <- rsUsed()
         shiny::req(dd, rs)
-        label_cols <- ifelse(dd$labels$label %in% as.character(rs), "red", "black")
+        label_cols <- ifelse(
+            dd$labels$label %in% as.character(rs), "red", "black"
+        )
+
         p <- ggplot2::ggplot() +
             ggplot2::geom_segment(
                 data = dd$segments,
                 ggplot2::aes(x = x, y = y, xend = xend, yend = yend)
             ) +
             ggplot2::geom_point(
-                data = dd$labels,
-                ggplot2::aes(x = x, y = y, customdata = label),
+                data  = dd$labels,
+                ggplot2::aes(x = x, y = y),   # customdata removed
                 color = label_cols
             ) +
             ggplot2::geom_text(
@@ -397,11 +403,16 @@
             ) +
             ggplot2::theme_minimal() +
             ggplot2::theme(
-                axis.text = ggplot2::element_blank(),
+                axis.text  = ggplot2::element_blank(),
                 axis.title = ggplot2::element_blank(),
                 panel.grid = ggplot2::element_blank()
             )
+
         quiet_ggplotly(p, source = "dendPlotly", tooltip = "") %>%
+            plotly::style(                          # inject after ggplotly()
+                customdata = dd$labels$label,
+                traces     = 2L                     # geom_point is trace 2
+            ) %>%
             plotly::layout(dragmode = "select") %>%
             plotly::event_register("plotly_selected") %>%
             plotly::event_register("plotly_click")
@@ -600,11 +611,6 @@
         )
     })
 
-    output$flowSOMPie <- shiny::renderPlot({
-        p <- flowSOMPiePlot()
-        shiny::req(p)
-        p
-    })
 
     # FlowSOM star plot.
     if (!is.null(fsom)) {
@@ -618,24 +624,37 @@
             p <- ret$tree
             coords <- fsom$MST$l
             coord_df <- data.frame(
-                x = coords[, 1],
-                y = coords[, 2],
+                x  = coords[, 1],
+                y  = coords[, 2],
                 id = seq_len(nrow(coords))
             )
-            p_click <- p + ggplot2::geom_point(
-                data = coord_df,
-                ggplot2::aes(x = x, y = y, customdata = id),
-                alpha = 0,
-                size = 8,
-                inherit.aes = FALSE
-            )
+            p_click <- p +
+                ggplot2::geom_point(
+                    data = coord_df,
+                    ggplot2::aes(x = x, y = y),          # ← customdata removed
+                    alpha = 0,
+                    size  = 8,
+                    inherit.aes = FALSE
+                )
+
+            last_trace <- length(quiet_ggplotly(p_click)$x$data)  # find invisible point trace
+
             quiet_ggplotly(p_click, source = "flowSOMStars", tooltip = "") %>%
+                plotly::style(                            # ← customdata injected here
+                    customdata = coord_df$id,
+                    traces = last_trace
+                ) %>%
                 plotly::layout(dragmode = "select") %>%
                 plotly::event_register("plotly_selected") %>%
                 plotly::event_register("plotly_click")
         })
     }
 
+    output$flowSOMPie <- shiny::renderPlot({
+        p <- flowSOMPiePlot()
+        shiny::req(p)
+        p
+    })
     # Violin plots.
     output$VlnPlot <- shiny::renderPlot({
         vlnPlot()

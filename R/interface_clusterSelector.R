@@ -53,6 +53,7 @@
     staticSomHeight = "Height in pixels for each static SOM plot.",
     flowSOMPieCols = "Number of pie-chart columns in the FlowSOM view.",
     flowSOMPieSize = "Pixel size of each FlowSOM pie.",
+    flowSOMPieMax = "Maximum number of pies to display in the FlowSOM view.",
     compareStatsTo = "Numerical column or saved group to compare cell counts against.",
     relativeTo = "Reference population used for percentage calculations.",
     singleNode = "Show counts for one specific SOM node alongside the selection.",
@@ -610,7 +611,19 @@
                 )
             ),
             shiny::column(
-                width = 6L,
+                width = 3L,
+                shiny::div(
+                    title = .clusterSelectorTooltips[["flowSOMPieMax"]],
+                    shiny::numericInput(
+                        inputId = "flowSOMPieMax",
+                        label   = "Max pies",
+                        value   = 5L, min = 1L, max = 50L, step = 1L,
+                        width   = "100%"
+                    )
+                )
+            ),
+            shiny::column(
+                width = 3L,
                 htmltools::tags$p(
                     paste(
                         "Each pie = one selected SOM node.",

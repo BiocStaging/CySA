@@ -78,3 +78,31 @@ test_that(".buildFlowSOMPiePlot() returns NULL for invalid rs", {
     expect_null(.buildFlowSOMPiePlot(som_codes, rs = integer(0), colsUsed))
     expect_null(.buildFlowSOMPiePlot(som_codes, rs = 9999, colsUsed))
 })
+
+test_that(".buildFlowSOMPiePlot() respects maxPies parameter", {
+    sce <- CySA_example_sce()
+    som_codes <- S4Vectors::metadata(sce)$SOM_codes
+    colsUsed <- S4Vectors::metadata(sce)$map$colsUsed
+
+    # Select 10 nodes
+    rs <- seq_len(10)
+
+    # Default maxPies = 5, should only plot first 5
+    p_default <- .buildFlowSOMPiePlot(som_codes, rs, colsUsed)
+    expect_s3_class(p_default, "ggplot")
+    # Check that only 5 levels are in the cluster_id factor
+    pie_data <- ggplot2::ggplot_build(p_default)$data[[1]]
+    expect_true(length(unique(pie_data$PANEL)) <= 5)
+
+    # Explicit maxPies = 3, should only plot first 3
+    p_3 <- .buildFlowSOMPiePlot(som_codes, rs, colsUsed, maxPies = 3L)
+    expect_s3_class(p_3, "ggplot")
+    pie_data_3 <- ggplot2::ggplot_build(p_3)$data[[1]]
+    expect_true(length(unique(pie_data_3$PANEL)) <= 3)
+
+    # maxPies larger than selection should show all
+    p_all <- .buildFlowSOMPiePlot(som_codes, rs, colsUsed, maxPies = 20L)
+    expect_s3_class(p_all, "ggplot")
+    pie_data_all <- ggplot2::ggplot_build(p_all)$data[[1]]
+    expect_equal(length(unique(pie_data_all$PANEL)), 10)
+})

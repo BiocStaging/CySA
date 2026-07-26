@@ -49,14 +49,21 @@
 #' @param colsUsed Marker names to include.
 #' @param ncol Number of columns passed to \code{facet_wrap}. \code{NULL}
 #'   lets ggplot2 choose automatically.
+#' @param maxPies Maximum number of pies to plot. When more nodes are selected,
+#'   only the first \code{maxPies} are shown. Default is 5.
 #'
 #' @return A \code{ggplot} object or \code{NULL}.
 #' @keywords internal
-.buildFlowSOMPiePlot <- function(somCodes, rs, colsUsed, ncol = NULL) {
+.buildFlowSOMPiePlot <- function(somCodes, rs, colsUsed, ncol = NULL, maxPies = 5L) {
     rs <- as.integer(rs)
     rs <- rs[!is.na(rs)]
     if (length(rs) < 1L || any(rs <= 0L) || any(rs > nrow(somCodes))) {
         return(NULL)
+    }
+
+    ## Limit to maxPies
+    if (length(rs) > maxPies) {
+        rs <- rs[seq_len(maxPies)]
     }
 
     markers <- intersect(colsUsed, colnames(somCodes))
@@ -112,13 +119,22 @@
 #'
 #' @keywords internal
 .buildSOMRasterSelectPlot <- function(somRasterData, rs) {
-    # somRasterData already contains one row per SOM node with its correct
-    # (x, y) grid position.  Rebuilding via expand.grid() produces only
-    # max(x) * max(y) rows — far fewer than the actual node count.
-    data.points <- somRasterData[, c("x", "y", "id"), drop = FALSE]
+    # Guard: ensure required columns exist before subsetting
+    required <- c("x", "y", "id")
+    missing_cols <- setdiff(required, colnames(somRasterData))
+    if (length(missing_cols) > 0L) {
+        warning(
+            ".buildSOMRasterSelectPlot: somRasterData is missing required column(s): ",
+            paste(sQuote(missing_cols), collapse = ", "),
+            ". Returning NULL."
+        )
+        return(NULL)
+    }
+
+    data.points <- somRasterData[, required, drop = FALSE]
 
     rs_valid <- as.integer(unlist(rs))
-    rs_valid <- rs_valid[!is.na(rs_valid) & rs_valid %in% data.points$id]
+    rs_valid  <- rs_valid[!is.na(rs_valid) & rs_valid %in% data.points$id]
 
     selected <- if (length(rs_valid) > 0L) {
         data.points[data.points$id %in% rs_valid, , drop = FALSE]
@@ -128,7 +144,7 @@
 
     ggplot2::ggplot(
         data.points,
-        ggplot2::aes(x = x, y = y, key = id)   # key is preserved by ggplotly → d$key
+        ggplot2::aes(x = x, y = y, key = id)
     ) +
         ggplot2::geom_point() +
         ggplot2::geom_point(

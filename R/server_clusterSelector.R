@@ -447,13 +447,41 @@
             rs <- rsUsed()
             shiny::req(rs)
             ncol_val <- input$flowSOMPieCols
-            .buildFlowSOMPiePlot(metaD[[somCodesName]], rs, colsUsed, ncol = ncol_val)
+            maxPies <- input$flowSOMPieMax
+            .buildFlowSOMPiePlot(metaD[[somCodesName]], rs, colsUsed, ncol = ncol_val, maxPies = maxPies)
         })
 
         rsUsed_d <- rsUsed %>% shiny::debounce(1500)
         sample2PlotDb <- shiny::reactive(input$samples2plot) %>% shiny::debounce(500)
 
-        # Register observers and outputs -------------------------------------------------
+        # Verbose logging observers (only when verbose = TRUE) -------------------
+        if (isTRUE(verbose)) {
+            # Log when dimension reduction computations happen
+            shiny::observe({
+                tsne()
+                cat(sprintf("[CySA] t-SNE computed at %s\n", format(Sys.time(), "%H:%M:%S")), file = stderr())
+            }) %>% shiny::bindCache(dimRedSelection(), input$perplexity)
+
+            shiny::observe({
+                umap()
+                cat(sprintf("[CySA] UMAP computed at %s\n", format(Sys.time(), "%H:%M:%S")), file = stderr())
+            }) %>% shiny::bindCache(input$dimRedSelection, input$n_neighbors)
+
+            shiny::observe({
+                pca()
+                cat(sprintf("[CySA] PCA computed at %s\n", format(Sys.time(), "%H:%M:%S")), file = stderr())
+            }) %>% shiny::bindCache(input$dimRedSelection)
+
+            # Log when SOM base plot is rebuilt
+            shiny::observe({
+                somBasePlot()
+                dims <- activeDims()
+                cat(sprintf("[CySA] SOM base plot rebuilt (%s vs %s) at %s\n",
+                            dims[1], dims[2], format(Sys.time(), "%H:%M:%S")), file = stderr())
+            }) %>% shiny::bindCache(activeDims(), input$somColorVar, input$somSizeVar)
+        }
+
+        # Register observers and outputs -----------------------------------------
         # Capture env explicitly so observers/outputs can write back to it even
         # when the enclosing factory environment is not on the search path (e.g.
         # during shiny::testServer()).

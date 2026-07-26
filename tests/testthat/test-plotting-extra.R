@@ -58,7 +58,10 @@ test_that("plotSOMScatter computes missing SOM code columns", {
     keep <- colnames(S4Vectors::metadata(sce)$SOM_codes)[1:2]
     S4Vectors::metadata(sce)$SOM_codes <- S4Vectors::metadata(sce)$SOM_codes[, keep, drop = FALSE]
     expect_warning(
-        p <- plotSOMScatter(sce, chs = c("marker3", "marker4")),
+        expect_warning(
+            p <- plotSOMScatter(sce, chs = c("marker3", "marker4")),
+            "computing SOM stats"
+        ),
         "computing SOM stats"
     )
     expect_s3_class(p, "ggplot")

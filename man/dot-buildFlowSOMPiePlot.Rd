@@ -4,7 +4,7 @@
 \alias{.buildFlowSOMPiePlot}
 \title{Build a FlowSOM Marker Pie Plot}
 \usage{
-.buildFlowSOMPiePlot(somCodes, rs, colsUsed, ncol = NULL)
+.buildFlowSOMPiePlot(somCodes, rs, colsUsed, ncol = NULL, maxPies = 5L)
 }
 \arguments{
 \item{somCodes}{SOM codes matrix.}
@@ -15,6 +15,9 @@
 
 \item{ncol}{Number of columns passed to \code{facet_wrap}. \code{NULL}
 lets ggplot2 choose automatically.}
+
+\item{maxPies}{Maximum number of pies to plot. When more nodes are selected,
+only the first \code{maxPies} are shown. Default is 5.}
 }
 \value{
 A \code{ggplot} object or \code{NULL}.

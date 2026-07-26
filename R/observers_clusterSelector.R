@@ -211,7 +211,10 @@
     # Plotly selection observers for SOM plots.
     lapply(seq_len(nPlots), function(i) {
         shiny::observeEvent(
-            .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i)),
+            suppressWarnings(
+                .safeEventData(verbose = verbose, "plotly_selected",
+                               source = paste0("somData", i))
+            ),
             {
                 if (verbose) message("som", i, " touched")
                 activePlot(i)
@@ -232,10 +235,9 @@
     # Zoom observers for SOM plots.
     lapply(seq_len(nPlots), function(plotIdx) {
         shiny::observe({
-            zoom <- .safeEventData(
-                verbose = verbose,
-                "plotly_relayout",
-                source = paste0("somData", plotIdx)
+            zoom <- suppressWarnings(
+                .safeEventData(verbose = verbose, "plotly_relayout",
+                               source = paste0("somData", plotIdx))
             )
             zoomFunc(zoom, plotIdx)
         })
@@ -243,7 +245,9 @@
 
     # somDataMain selection observer.
     shiny::observeEvent(
-        .safeEventData(verbose = verbose, "plotly_selected", source = "somDataMain"),
+        suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_selected", source = "somDataMain")
+        ),
         {
             d <- .safeEventData(verbose = verbose, "plotly_selected", source = "somDataMain")
             if (is.null(d)) return(NULL)
@@ -256,35 +260,43 @@
 
     # somDataMain zoom observer.
     shiny::observe({
-        zoom <- .safeEventData(
-            verbose = verbose, "plotly_relayout", source = "somDataMain"
+        zoom <- suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_relayout", source = "somDataMain")
         )
         zoomFunc(zoom, 1L)
     })
 
     # Dimension-reduction plot selection observers.
     for (src in c("tsne", "umap", "pca")) {
-        shiny::observeEvent(
-            .safeEventData(verbose = verbose, "plotly_selected", source = src),
-            {
-                if (verbose) message(src, " touched")
-                rs <- shiny::isolate(rsUsed_d())
-                if (is.null(rs)) return(NULL)
-                d <- .safeEventData(
-                    verbose = verbose,
-                    "plotly_selected",
-                    source = src
-                )
-                if (is.null(d)) return(NULL)
-                d <- .inputSelect(d, rs, shiny::isolate(input$selectMode))
-                shiny::isolate(rsUsed(d))
-            }
-        )
+        local({
+            src_local <- src
+            shiny::observeEvent(
+                suppressWarnings(
+                    .safeEventData(verbose = verbose, "plotly_selected",
+                                   source = src_local)
+                ),
+                {
+                    if (verbose) message(src_local, " touched")
+                    rs <- shiny::isolate(rsUsed_d())
+                    if (is.null(rs)) return(NULL)
+                    d <- .safeEventData(
+                        verbose = verbose,
+                        "plotly_selected",
+                        source  = src_local   # ← use local copy
+                    )
+                    if (is.null(d)) return(NULL)
+                    d <- .inputSelect(d, rs, shiny::isolate(input$selectMode))
+                    shiny::isolate(rsUsed(d))
+                }
+            )
+        })
     }
 
     # Dendrogram selection observers.
     shiny::observeEvent(
-        .safeEventData(verbose = verbose, "plotly_selected", source = "dendPlotly"),
+        suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_selected", source = "dendPlotly")
+        ),
         {
             d <- .safeEventData(
                 verbose = verbose,
@@ -309,7 +321,9 @@
     )
 
     shiny::observeEvent(
-        .safeEventData(verbose = verbose, "plotly_click", source = "dendPlotly"),
+        suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_click", source = "dendPlotly")
+        ),
         {
             d <- .safeEventData(
                 verbose = verbose,
@@ -333,7 +347,9 @@
 
     # SOM raster grid selection observer.
     shiny::observeEvent(
-        .safeEventData(verbose = verbose, "plotly_selected", source = "somGrid"),
+        suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_selected", source = "dendPlotly")
+        ),
         {
             rs <- shiny::isolate(rsUsed())
             if (is.null(rs)) return(NULL)
@@ -350,7 +366,9 @@
 
     # Scatter-plot rectangular selection observer.
     shiny::observeEvent(
-        .safeEventData(verbose = verbose, "plotly_selected", source = "scatterPlot"),
+        suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_selected", source = "scatterPlot")
+        ),
         {
             rs <- shiny::isolate(rsUsed_d())
             dimSel <- dimSelection()

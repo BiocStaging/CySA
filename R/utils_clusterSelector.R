@@ -53,6 +53,9 @@
     cluster_levels <- if (is.factor(sce$cluster_id)) levels(sce$cluster_id) else sort(unique(as.integer(sce$cluster_id)))
     outputList <- .initializeOutputList(outputList, cluster_levels)
     colsUsed <- metaD$map$colsUsed
+    if (!"id" %in% colnames(somRasterData)) {
+        somRasterData$id <- seq_len(nrow(somRasterData))
+    }
     keepCols <- intersect(c("x", "y", "id", colsUsed), colnames(somRasterData))
     somRasterData <- somRasterData[, keepCols]
     if (!is.null(somRasterObj)) {

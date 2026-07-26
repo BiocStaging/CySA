@@ -63,7 +63,9 @@
 #' @keywords internal
 .buildSelectionObserver <- function(sourceId, input, rsUsed, inputSelect, verbose) {
     shiny::observeEvent(
-        .safeEventData(verbose = verbose, "plotly_selected", source = sourceId),
+        suppressWarnings(
+            .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
+        ),
         {
             d <- .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
             if (is.null(d)) {
@@ -97,7 +99,10 @@
                                    inputSelect, verbose) {
     lapply(seq_len(nPlots), function(i) {
         shiny::observeEvent(
-            .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i)),
+            suppressWarnings(                  # ← add this
+                .safeEventData(verbose = verbose, "plotly_selected",
+                               source = paste0("somData", i))
+            ),
             {
                 message("som", i, " touched")
                 activePlot(i)
