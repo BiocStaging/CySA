@@ -78,43 +78,49 @@ test_that("server removes a single group when rmGrp is triggered", {
 
 test_that("server rmGrp does nothing when no group is selected", {
     test_app <- make_test_app()
+    suppress_plotly_event_warnings({
+        shiny::testServer(
+            app = test_app$app,
+            expr = {
+                # Initial state: only Rest
+                session$flushReact()
 
-    shiny::testServer(
-        app = test_app$app,
-        expr = {
-            # Initial state: only Rest
-            initial_names <- names(rv$outputList)
+                initial_names <- names(rv$outputList)
 
-            # Trigger rmGrp without selecting a group to remove
-            suppressWarnings(session$setInputs(rmGrp = 1))
-            suppressWarnings(session$flushReact())
+                # Trigger rmGrp without selecting a group to remove
+                suppressWarnings(session$setInputs(rmGrp = 1))
+                suppressWarnings(session$flushReact())
 
-            # State should be unchanged
-            expect_equal(names(rv$outputList), initial_names)
-        }
-    )
+                # State should be unchanged
+                expect_equal(names(rv$outputList), initial_names)
+            }
+        )
+    })
 })
 
 test_that("server rmGrp does nothing when selected group doesn't exist", {
     test_app <- make_test_app()
 
-    shiny::testServer(
-        app = test_app$app,
-        expr = {
-            # Initial state: only Rest
-            initial_names <- names(rv$outputList)
+    suppress_plotly_event_warnings({
+        shiny::testServer(
+            app = test_app$app,
+            expr = {
+                session$flushReact()
+                # Initial state: only Rest
+                initial_names <- names(rv$outputList)
 
-            # Try to remove a non-existent group
-            suppressWarnings(session$setInputs(
-                clusterNameRM = "NonExistentGroup",
-                rmGrp = 1
-            ))
-            suppressWarnings(session$flushReact())
+                # Try to remove a non-existent group
+                suppressWarnings(session$setInputs(
+                    clusterNameRM = "NonExistentGroup",
+                    rmGrp = 1
+                ))
+                suppressWarnings(session$flushReact())
 
-            # State should be unchanged
-            expect_equal(names(rv$outputList), initial_names)
-        }
-    )
+                # State should be unchanged
+                expect_equal(names(rv$outputList), initial_names)
+            }
+        )
+    })
 })
 
 

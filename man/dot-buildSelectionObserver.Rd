@@ -4,7 +4,14 @@
 \alias{.buildSelectionObserver}
 \title{Build Selection Observer}
 \usage{
-.buildSelectionObserver(sourceId, input, rsUsed, inputSelect, verbose)
+.buildSelectionObserver(
+  sourceId,
+  input,
+  rsUsed,
+  rsUsed_d,
+  inputSelect,
+  verbose
+)
 }
 \arguments{
 \item{sourceId}{Plotly source id.}

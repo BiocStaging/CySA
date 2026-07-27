@@ -9,6 +9,7 @@
   input,
   output,
   rsUsed,
+  rsUsed_d,
   activePlot,
   inputSelect,
   verbose

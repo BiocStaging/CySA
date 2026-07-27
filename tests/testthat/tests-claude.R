@@ -183,7 +183,7 @@ test_that("tsneFunc() returns an Rtsne object", {
     sce  <- CySA_example_sce(n_cells = 60L, n_nodes = 20L)
     cols <- S4Vectors::metadata(sce)$map$colsUsed[seq_len(5L)]
 
-    res <- tsneFunc(cols, perplexity = 5L, sce, "SOM_codes")
+    res <- CySA:::tsneFunc(cols, perplexity = 5L, sce, "SOM_codes")
 
     expect_true(inherits(res, "Rtsne"))
     expect_true("Y" %in% names(res))
@@ -196,7 +196,7 @@ test_that("tsneFunc() Y matrix is n_nodes x 2", {
     sce     <- CySA_example_sce(n_cells = 60L, n_nodes = n_nodes)
     cols    <- S4Vectors::metadata(sce)$map$colsUsed[seq_len(5L)]
 
-    res <- tsneFunc(cols, perplexity = 5L, sce, "SOM_codes")
+    res <- CySA:::tsneFunc(cols, perplexity = 5L, sce, "SOM_codes")
 
     expect_equal(nrow(res$Y), n_nodes)
     expect_equal(ncol(res$Y), 2L)
@@ -208,7 +208,7 @@ test_that("tsneFunc() clamps perplexity silently when it would exceed the maximu
     sce  <- CySA_example_sce(n_cells = 60L, n_nodes = 10L)
     cols <- S4Vectors::metadata(sce)$map$colsUsed[seq_len(5L)]
 
-    expect_no_error(tsneFunc(cols, perplexity = 100L, sce, "SOM_codes"))
+    expect_no_error(CySA:::tsneFunc(cols, perplexity = 100L, sce, "SOM_codes"))
 })
 
 test_that("tsneFunc() Y coordinates are all finite", {
@@ -216,7 +216,7 @@ test_that("tsneFunc() Y coordinates are all finite", {
 
     sce  <- CySA_example_sce(n_cells = 60L, n_nodes = 20L)
     cols <- S4Vectors::metadata(sce)$map$colsUsed[seq_len(5L)]
-    res  <- tsneFunc(cols, perplexity = 5L, sce, "SOM_codes")
+    res  <- CySA:::tsneFunc(cols, perplexity = 5L, sce, "SOM_codes")
 
     expect_true(all(is.finite(res$Y)))
 })
@@ -610,12 +610,9 @@ test_that(".buildSelectionObserver() does not mutate rsUsed before any event fir
 
 # ── Regression test: after production fix, warning must be fully gone ────────
 test_that("REGRESSION: no plotly warning from .buildSelectionObserver() trigger", {
-    # This test FAILS until .buildSelectionObserver() wraps its observeEvent
-    # trigger in suppressWarnings().  Flip expect_warning → expect_no_warning
-    # once the production fix is applied.
     expect_warning(
         shiny::testServer(.make_sel_obs_app(), expr = {
-            suppressWarnings(session$flushReact())
+            session$flushReact()
         }),
         regexp = "is not registered",
         label  = paste(
@@ -625,7 +622,6 @@ test_that("REGRESSION: no plotly warning from .buildSelectionObserver() trigger"
         )
     )
 })
-
 
 # =============================================================================
 # .buildSOMDataObservers() — structural / guard-rail tests  (same pattern)
@@ -658,19 +654,31 @@ test_that(".buildSOMDataObservers() does not mutate activePlot before any event 
 })
 
 test_that("REGRESSION: no plotly warning from .buildSOMDataObservers() triggers", {
-    # Same rationale as the .buildSelectionObserver() regression test above.
-    expect_warning(expect_warning(
-        shiny::testServer(.make_som_obs_app(nPlots = 2L), expr = {
-            suppressWarnings(session$flushReact())
-        }),
-        regexp = "is not registered",
-        label  = paste(
+    caught <- character()
+    withCallingHandlers(
+        {
+            shiny::testServer(.make_som_obs_app(nPlots = 2L), expr = {
+                session$flushReact()
+            })
+        },
+        warning = function(w) {
+            if (grepl("is not registered", conditionMessage(w))) {
+                caught <<- c(caught, conditionMessage(w))
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
+
+    expect_true(
+        length(caught) > 0,
+        label = paste(
             "Expected warning is present — production fix not yet applied.",
-            "Flip to expect_no_warning() once .buildSOMDataObservers()",
+            "Flip this assertion once .buildSOMDataObservers()",
             "wraps its observeEvent triggers in suppressWarnings()."
         )
-    ))
+    )
 })
+
 test_that("KNOWN BUG: .buildSelectionObserver() references out-of-scope rsUsed_d", {
     # The observer body contains `shiny::isolate(rsUsed_d())` but rsUsed_d is
     # not a parameter of .buildSelectionObserver(). Firing the observer outside

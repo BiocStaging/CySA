@@ -26,7 +26,7 @@
     somRasterData <- somRasterData[, c("x", "y", colsUsed), drop = FALSE]
     raster_long <- tidyr::pivot_longer(
         somRasterData,
-        cols = c(-"x", -"y"),
+        cols = -c("x", "y"),
         names_to = "marker",
         values_to = "value"
     )
@@ -81,7 +81,7 @@
 
     long <- tidyr::pivot_longer(
         expr,
-        cols      = tidyr::all_of(markers),
+        cols      = tidyselect::all_of(markers),
         names_to  = "marker",
         values_to = "expression"
     )

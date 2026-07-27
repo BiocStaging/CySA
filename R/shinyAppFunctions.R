@@ -31,7 +31,7 @@ safe_event_data <- function(event, source = "all", verbose = FALSE) {
 # the customdata aesthetic, which is consumed by plotly after conversion.
 quiet_ggplotly <- function(p, ...) {
     result <- withCallingHandlers(
-        ggplotly(p, ...),
+        suppressMessages(ggplotly(p, ...)),
         warning = function(w) {
             msg <- conditionMessage(w)
             if (grepl("unknown aesthetics.*(customdata|key)", msg, ignore.case = TRUE) ||
@@ -43,13 +43,18 @@ quiet_ggplotly <- function(p, ...) {
         }
     )
     # Remove ggplot2-internal 'colour' attribute from every trace.
-    # It is left behind by ggplotly() and causes plotly to warn during
-    # rendering and event_register() validation.
     result$x$data <- lapply(result$x$data, function(tr) {
         tr[["colour"]] <- NULL
         tr
     })
-    result
+
+    # Force early evaluation of the lazy plotly object. plotly_build() is what
+    # actually resolves trace type/mode and emits the "No trace type
+    # specified"/"No scatter mode specified" messages -- doing it here, inside
+    # suppressMessages(), means Shiny's later renderPlotly()/toJSON step (or a
+    # test accessing output$xxx) just serializes an already-resolved object
+    # and has nothing left to emit.
+    suppressMessages(plotly::plotly_build(result))
 }
 
 # highlight_df = function ----
@@ -160,21 +165,6 @@ PercentBarPlotFunc <- function(sce, relativeToCol, clusterPatientTable, rs, outp
     rownames(expInfo) <- expInfo$sample_id
     expInfo <- expInfo[, !colnames(expInfo) %in% c("sample_nr", "sample_id", "sample"), drop = FALSE]
 
-    eI <- apply(expInfo, 2, as.numeric)
-    # browser()
-    # TODO make case
-    # if(relativeToCol == "none"){
-    #   rSums = data.frame(Percent = rowSums(clusterPatientTable[,rs,drop=FALSE])/rowSums(clusterPatientTable[,,drop=FALSE])*100)
-    # } else {
-    #   if (relativeToCol %in% colnames(metadata(sce)$experiment_info)){
-    #     rSums = data.frame(Percent = rowSums(clusterPatientTable[,rs,drop=FALSE])/expInfo[rownames(clusterPatientTable),relativeToCol]*100)
-    #   } else {
-    #     if(relativeToCol %in% names(outputList)){
-    #       rSums = data.frame(Percent = rowSums(clusterPatientTable[,rs,drop=FALSE])/rowSums(clusterPatientTable[,outputList[[relativeToCol]],drop=FALSE])*100)
-    #     } else{
-    #     }
-    #   }
-    # }
     rSums <- data.frame(
         Percent = compute_relative_counts(
             clusterPatientTable, rs, relativeToCol, expInfo, outputList
@@ -349,7 +339,7 @@ plotViolinFunc <- function(sce, somCodesName = "SOM_codes", upsetSelection, outp
         wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
         wide$somNode <- factor(rows, levels = seq_len(nNodes))
         long <- tidyr::pivot_longer(wide,
-                                    cols = markers,
+                                    cols = tidyselect::all_of(markers),
                                     names_to = "marker", values_to = "expr"
         )
         long$grpName <- na
@@ -592,7 +582,7 @@ plotViolin2Func <- function(sce, somCodesName = "SOM_codes", violinSelection, up
         wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
         wide$somNode <- factor(rows, levels = seq_len(nNodes))
         long <- tidyr::pivot_longer(wide,
-                                    cols = markers,
+                                    cols = tidyselect::all_of(markers),
                                     names_to = "marker", values_to = "expr"
         )
         long$grpName <- na

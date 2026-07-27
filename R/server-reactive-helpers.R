@@ -61,26 +61,21 @@
 #' @param verbose Logical indicating whether to print debug messages.
 #'
 #' @keywords internal
-.buildSelectionObserver <- function(sourceId, input, rsUsed, inputSelect, verbose) {
+.buildSelectionObserver <- function(sourceId, input, rsUsed, rsUsed_d, inputSelect, verbose) {
     shiny::observeEvent(
         suppressWarnings(
             .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
         ),
         {
             d <- .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
-            if (is.null(d)) {
-                return(NULL)
-            }
+            if (is.null(d)) return(NULL)
             rs <- shiny::isolate(rsUsed_d())
-            if (is.null(rs)) {
-                return(NULL)
-            }
+            if (is.null(rs)) return(NULL)
             d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
             shiny::isolate(rsUsed(d))
         }
     )
 }
-
 
 #' Build SOM Data Selection Observers
 #'
@@ -95,30 +90,26 @@
 #' @param verbose Logical indicating whether to print debug messages.
 #'
 #' @keywords internal
-.buildSOMDataObservers <- function(nPlots, input, output, rsUsed, activePlot,
+.buildSOMDataObservers <- function(nPlots, input, output, rsUsed, rsUsed_d, activePlot,
                                    inputSelect, verbose) {
     lapply(seq_len(nPlots), function(i) {
         shiny::observeEvent(
-            suppressWarnings(                  # ← add this
-                .safeEventData(verbose = verbose, "plotly_selected",
-                               source = paste0("somData", i))
+            suppressWarnings(
+                .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i))
             ),
             {
-                message("som", i, " touched")
+                if (isTRUE(verbose)) message("som", i, " touched")
                 activePlot(i)
                 rs <- shiny::isolate(rsUsed_d())
                 shiny::req(rs)
                 d <- .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i))
-                if (is.null(d)) {
-                    return(NULL)
-                }
+                if (is.null(d)) return(NULL)
                 d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
                 shiny::isolate(rsUsed(d))
             }
         )
     })
 }
-
 
 #' Build Zoom Observers for SOM Data Plots
 #'

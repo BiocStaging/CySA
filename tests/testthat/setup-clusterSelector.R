@@ -8,6 +8,7 @@ library(shiny)
 
 # Build a small, deterministic app object that tests can share.
 make_test_app <- function(n_cells = 200, n_nodes = 10) {
+    set.seed(12)
     sce <- CySA_example_sce(n_cells = n_cells, n_nodes = n_nodes)
     prepped <- prepClusterSelectorData(sce, total_cells_to_sample = 100)
 
@@ -56,4 +57,40 @@ make_test_app <- function(n_cells = 200, n_nodes = 10) {
     )
 
     list(app = app, env = env, sce = prepped$sce)
+}
+
+
+#' Suppress the expected "plotly event not registered" warning.
+#'
+#' shiny::testServer() has no live browser client, so plotly's
+#' event_register() calls always warn that nothing subscribed to
+#' plotly_selected/plotly_relayout events. This is expected noise in
+#' headless tests and is suppressed here rather than at each call site.
+suppress_plotly_event_warnings <- function(expr) {
+    withCallingHandlers(
+        expr,
+        warning = function(w) {
+            if (grepl("event tied a source ID.*is not registered", conditionMessage(w))) {
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
+}
+
+
+# add near the top of the test file, or in helper-*.R
+quiet_plotly_test <- function(expr) {
+    withCallingHandlers(
+        suppressMessages(force(expr)),
+        warning = function(w) {
+            msg <- conditionMessage(w)
+            if (grepl("is not registered", msg) ||
+                grepl("event_register", msg) ||
+                grepl("No trace type specified", msg, ignore.case = TRUE) ||
+                grepl("no positional attributes specified", msg, ignore.case = TRUE) ||
+                grepl("don't have these attributes", msg, ignore.case = TRUE)) {
+                invokeRestart("muffleWarning")
+            }
+        }
+    )
 }

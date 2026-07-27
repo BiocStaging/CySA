@@ -171,12 +171,14 @@ test_that("PercentBarPlotFunc respects group colouring", {
         nrow(S4Vectors::metadata(sce)$experiment_info)
     )
     cpt <- table(sample_id = sce$sample_id, cluster_id = sce$cluster_id)
-    expect_warning(
+
+    expect_no_warning(
         p <- PercentBarPlotFunc(
-        sce = sce, relativeToCol = "none", clusterPatientTable = cpt,
-        rs = c(1L, 2L), outputList = list(), group = NULL,
-        groupsInput = list(group1 = "sample1", group2 = "sample2")
-    ), "NAs introduced by coercion")
+            sce = sce, relativeToCol = "none", clusterPatientTable = cpt,
+            rs = c(1L, 2L), outputList = list(), group = NULL,
+            groupsInput = list(group1 = "sample1", group2 = "sample2")
+        )
+    )
     expect_s3_class(p, "ggplot")
 })
 

@@ -138,17 +138,23 @@
     # SOM 2D plots.
     lapply(seq_len(nPlots), function(i) {
         local({
+
             plotIdxLocal <- i
+
             output[[paste0("somData", plotIdxLocal)]] <- plotly::renderPlotly({
+
                 colorbyGroups <- input$colorbyGroups
+
                 selectedUpdate2()
                 showGroups <- input$showGroups
+
                 dimSel <- dimSelection()
                 rs <- rsUsed_d()
                 shiny::req(rs)
                 triggerRedraw()
 
                 plotIdx <- if (plotIdxLocal == nPlots) activePlot() else plotIdxLocal
+                shiny::req(length(dimSel) >= plotIdx)
                 dims <- dimSel[[plotIdx]]$dims
                 colorVar <- input$somColorVar
                 sizeVar <- input$somSizeVar
@@ -478,6 +484,7 @@
         rSums
     })
 
+
     output$cellPercentages <- shiny::renderPrint({
         outputList <- rv$outputList
         rs <- rsUsed()
@@ -486,7 +493,8 @@
         relativeToCol <- input$relativeTo
         expInfo <- S4Vectors::metadata(sce)$experiment_info
         rownames(expInfo) <- expInfo$sample_id
-        expInfo <- expInfo[, !colnames(expInfo) %in% c("sample_nr", "sample_id", "sample"), drop = FALSE]
+        numCols <- unlist(lapply(expInfo, is.numeric), use.names = FALSE)
+        expInfo <- expInfo[, numCols, drop = FALSE]
         eI <- apply(expInfo, 2, as.numeric)
         rSums <- compute_relative_counts(
             clusterPatientTable, rs, relativeToCol, eI, outputList
@@ -494,7 +502,6 @@
         names(rSums) <- rownames(clusterPatientTable)
         noquote(formatC(signif(rSums, digits = 2), digits = 2, format = "fg", flag = "#"))
     })
-
     output$CountBar <- shiny::renderPlot({
         countBarPlot()
     })
@@ -506,7 +513,8 @@
     output$ttestResult <- shiny::renderPrint({
         empty <- FALSE
         groupsVar <- input$groupsVar
-        if (!input$groupsVar %in% colnames(metaD$experiment_info)) empty <- TRUE
+        if (is.null(groupsVar) || length(groupsVar) == 0 ||
+            !groupsVar %in% colnames(metaD$experiment_info)) empty <- TRUE
         grpInp <- groupsInput()
         if (purrr::is_empty(grpInp)) empty <- TRUE
         if (any(unlist(lapply(grpInp, purrr::is_empty)))) empty <- TRUE
@@ -679,79 +687,18 @@
             dimSel <- dimSelection()
             rs <- rsUsed()
             shiny::req(rs)
-            grDevices::pdf(file = file)
-            dendPlot() %>% plot(main = "dendrogram")
-            # NOTE: print() calls below are required for ggplot objects in PDF device
-            # BiocCheck flags these, but they are legitimate usage
-            invisible(print(countBarPlot()))
-            invisible(print(PercentBarPlot()))
-
-            pctl <- input$scatterPercentile
-            if (is.null(pctl)) pctl <- 0.99
-            tailP <- (1 - pctl) / 2
-            somCodes <- metaD[[somCodesName]]
-            dlColorVar <- input$somColorVar
-            dlSizeVar <- input$somSizeVar
-            if (is.null(dlColorVar)) dlColorVar <- "n"
-            if (is.null(dlSizeVar)) dlSizeVar <- "max"
-            for (plotIdx in seq_len(nPlots)) {
-                dims <- dimSel[[plotIdx]]$dims
-                pp1 <- plotSOMScatter(
-                    x = sce,
-                    chs = c(dims[1L], dims[2L]),
-                    pointSize = dlSizeVar,
-                    color_by = dlColorVar,
-                    xRN = sceRN, xCN = sceCN
-                )
-                xlimP <- if (dims[1L] %in% colnames(somCodes)) {
-                    stats::quantile(somCodes[, dims[1L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
-                } else {
-                    NULL
-                }
-                ylimP <- if (dims[2L] %in% colnames(somCodes)) {
-                    stats::quantile(somCodes[, dims[2L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
-                } else {
-                    NULL
-                }
-                invisible(print(ggsomPlot(
-                    pp1, plotIdx, rs, dimSelection = dimSel,
-                    sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP
-                )))
-            }
-            invisible(print(tsnePlot()))
-            invisible(print(umapPlot()))
-            invisible(print(pcaPlot()))
-            invisible(print(scatterPlot()))
-
-            xy <- somRasterPlot()
-            if (!is.null(xy) && !is.null(baseRasterGgplot)) {
-                invisible(print(baseRasterGgplot +
-                    ggplot2::geom_point(
-                        data = xy, ggplot2::aes(x = x, y = y),
-                        color = "red", size = 1, inherit.aes = FALSE
-                    ) +
-                    ggplot2::geom_point(
-                        data = xy, ggplot2::aes(x = x, y = y),
-                        color = "red", shape = 3, size = 1, inherit.aes = FALSE
-                    )))
-            }
-
-            dlOutputList <- rv$outputList
-            dlUpsetSel <- input$upsetSelection
-            dlViolinSel <- input$violinSelection
-            if (length(dlUpsetSel) < 3) dlUpsetSel <- names(dlOutputList)
-            if (is.null(dlViolinSel)) dlViolinSel <- colsUsed
-            pVln <- plotViolinFunc(
-                sce, somCodesName, dlUpsetSel, dlOutputList, dlViolinSel
+            .writeClusterSelectorPdf(
+                file = file, dimSel = dimSel, rs = rs, sce = sce, sceRN = sceRN, sceCN = sceCN,
+                metaD = metaD, somCodesName = somCodesName,
+                dendPlotObj = dendPlot(), countBarPlotObj = countBarPlot(),
+                PercentBarPlotObj = PercentBarPlot(), tsnePlotObj = tsnePlot(),
+                umapPlotObj = umapPlot(), pcaPlotObj = pcaPlot(), scatterPlotObj = scatterPlot(),
+                somRasterXy = somRasterPlot(), baseRasterGgplot = baseRasterGgplot,
+                dlColorVar = input$somColorVar %||% "n", dlSizeVar = input$somSizeVar %||% "max",
+                pctl = input$scatterPercentile %||% 0.99,
+                dlOutputList = rv$outputList, dlUpsetSel = input$upsetSelection,
+                dlViolinSel = input$violinSelection %||% colsUsed, colsUsed = colsUsed
             )
-            if (!is.null(pVln)) invisible(print(pVln))
-
-            pVln2 <- plotViolin2Func(sce, somCodesName, dlViolinSel, dlUpsetSel, dlOutputList)
-            if (!is.null(pVln2)) invisible(print(pVln2))
-
-            pUpset <- upsetPlotFunc(dlUpsetSel, dlOutputList, sce)
-            if (!is.null(pUpset)) invisible(print(pUpset))
-            grDevices::dev.off()
         }
     )
 }

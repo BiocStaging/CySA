@@ -338,20 +338,24 @@
         })
 
         groupsInput <- shiny::reactive({
-            if (!input$groupsVar %in% colnames(metaD$experiment_info)) {
+            groupsVar <- input$groupsVar
+            if (is.null(groupsVar) || length(groupsVar) == 0 ||
+                !groupsVar %in% colnames(metaD$experiment_info)) {
                 return(NULL)
             }
             grp1 <- metaD$experiment_info[
-                metaD$experiment_info[, input$groupsVar] %in% input$group1, "sample_id"
+                metaD$experiment_info[, groupsVar] %in% input$group1, "sample_id"
             ]
             grp2 <- metaD$experiment_info[
-                metaD$experiment_info[, input$groupsVar] %in% input$group2, "sample_id"
+                metaD$experiment_info[, groupsVar] %in% input$group2, "sample_id"
             ]
             list(group1 = grp1, group2 = grp2)
         }) %>% shiny::debounce(1000)
 
         inputClusterNumber <- shiny::reactive({
-            stringr::str_split(input$clusterNumbers, ",")[[1]] %>% as.integer()
+            txt <- input$clusterNumbers
+            if (is.null(txt) || !nzchar(txt)) return(integer(0))
+            stringr::str_split(txt, ",")[[1]] %>% as.integer()
         }) %>% shiny::debounce(1000)
 
         violinPlotSelection <- shiny::reactive({
@@ -376,7 +380,7 @@
                 if (length(rows) < 2) return(NULL)
                 wide <- as.data.frame(somCodes[rows, markers, drop = FALSE])
                 wide$somNode <- factor(rows, levels = seq_len(nNodes))
-                long <- tidyr::pivot_longer(wide, cols = markers,
+                long <- tidyr::pivot_longer(wide, cols = tidyselect::all_of(markers),
                                             names_to = "marker",
                                             values_to = "expr")
                 long$grpName <- na

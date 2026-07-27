@@ -154,3 +154,51 @@
 }
 
 
+# in a plain R file, e.g. R/server-helpers.R
+.writeClusterSelectorPdf <- function(file, dimSel, rs, sce, sceRN, sceCN, metaD,
+                                     somCodesName, dendPlotObj, countBarPlotObj,
+                                     PercentBarPlotObj, tsnePlotObj, umapPlotObj,
+                                     pcaPlotObj, scatterPlotObj, somRasterXy,
+                                     baseRasterGgplot, dlColorVar, dlSizeVar, pctl,
+                                     dlOutputList, dlUpsetSel, dlViolinSel, colsUsed) {
+    grDevices::pdf(file = file)
+    on.exit(grDevices::dev.off(), add = TRUE)
+
+    dendPlotObj %>% plot(main = "dendrogram")
+    invisible(print(countBarPlotObj))
+    invisible(print(PercentBarPlotObj))
+
+    tailP <- (1 - pctl) / 2
+    somCodes <- metaD[[somCodesName]]
+    for (plotIdx in seq_along(dimSel)) {
+        dims <- dimSel[[plotIdx]]$dims
+        pp1 <- plotSOMScatter(x = sce, chs = c(dims[1L], dims[2L]),
+                              pointSize = dlSizeVar, color_by = dlColorVar,
+                              xRN = sceRN, xCN = sceCN)
+        xlimP <- if (dims[1L] %in% colnames(somCodes))
+            stats::quantile(somCodes[, dims[1L]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
+        ylimP <- if (dims[2L] %in% colnames(somCodes))
+            stats::quantile(somCodes[, dims[2L]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
+        invisible(print(ggsomPlot(pp1, plotIdx, rs, dimSelection = dimSel,
+                                  sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP)))
+    }
+
+    invisible(print(tsnePlotObj)); invisible(print(umapPlotObj)); invisible(print(pcaPlotObj))
+    invisible(print(scatterPlotObj))
+
+    if (!is.null(somRasterXy) && !is.null(baseRasterGgplot)) {
+        invisible(print(baseRasterGgplot +
+                            ggplot2::geom_point(data = somRasterXy, ggplot2::aes(x = x, y = y),
+                                                color = "red", size = 1, inherit.aes = FALSE) +
+                            ggplot2::geom_point(data = somRasterXy, ggplot2::aes(x = x, y = y),
+                                                color = "red", shape = 3, size = 1, inherit.aes = FALSE)))
+    }
+
+    if (length(dlUpsetSel) < 3) dlUpsetSel <- names(dlOutputList)
+    pVln  <- plotViolinFunc(sce, somCodesName, dlUpsetSel, dlOutputList, dlViolinSel)
+    if (!is.null(pVln)) invisible(print(pVln))
+    pVln2 <- plotViolin2Func(sce, somCodesName, dlViolinSel, dlUpsetSel, dlOutputList)
+    if (!is.null(pVln2)) invisible(print(pVln2))
+    pUpset <- upsetPlotFunc(dlUpsetSel, dlOutputList, sce)
+    if (!is.null(pUpset)) invisible(print(pUpset))
+}
