@@ -410,7 +410,7 @@ test_that("downloadPlots integration: server accepts all inputs the handler depe
         shiny::testServer(ta$app, {
             markers <- S4Vectors::metadata(ta$sce)$map$colsUsed
 
-            session$setInputs(
+            suppressWarnings(session$setInputs(
                 # filename() reads this
                 clusterNameSelect  = "TestGroup",
                 # content() reads these
@@ -430,8 +430,8 @@ test_that("downloadPlots integration: server accepts all inputs the handler depe
                 n_neighbors        = 4L,
                 currentDimX        = markers[1L],
                 currentDimY        = markers[2L]
-            )
-            session$flushReact()
+            ))
+            suppressWarnings(session$flushReact())
 
             expect_equal(session$input$clusterNameSelect, "TestGroup",
                          label = "clusterNameSelect reaches the session")
@@ -500,7 +500,7 @@ test_that("downloadPlots integration: server accepts all inputs the handler depe
         shiny::testServer(ta$app, {
             markers <- S4Vectors::metadata(ta$sce)$map$colsUsed
 
-            session$setInputs(
+            suppressWarnings(session$setInputs(
                 clusterNameSelect  = "TestGroup",
                 clusterNumbers     = "1",
                 somColorVar        = "n",
@@ -518,8 +518,8 @@ test_that("downloadPlots integration: server accepts all inputs the handler depe
                 n_neighbors        = 4L,
                 currentDimX        = markers[1L],
                 currentDimY        = markers[2L]
-            )
-            session$flushReact()
+            ))
+            suppressWarnings(session$flushReact())
 
             # expect_equal() accepts label; use it for all assertions
             expect_equal(session$input$clusterNameSelect, "TestGroup",
@@ -546,7 +546,7 @@ test_that("downloadPlots integration: missing clusterNameSelect does not crash s
     # intent is documented here in the test body instead.
     .muffle_plotly_warning({
         shiny::testServer(ta$app, {
-            session$setInputs(clusterNumbers = "1", selectMode = "view")
+            suppressWarnings(session$setInputs(clusterNumbers = "1", selectMode = "view"))
 
             # expect_no_error() signature: expect_no_error(object) — no label
             expect_no_error(session$flushReact())

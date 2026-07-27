@@ -20,12 +20,12 @@ test_that("server updates rv$outputList when group is named", {
             expect_equal(sort(names(rv$outputList)), "Rest")
 
             # Simulate typing a name and applying a cluster selection.
-            session$setInputs(
+            suppressWarnings(session$setInputs(
                 clusterName = "MyGroup",
                 clusterNumbers = "1,2",
                 applyName = 1
-            )
-            session$flushReact()
+            ))
+            suppressWarnings(session$flushReact())
 
             expect_true("MyGroup" %in% names(rv$outputList))
             expect_true(all(rv$outputList$MyGroup == c(1L, 2L)))
@@ -53,22 +53,22 @@ test_that("server removes a single group when rmGrp is triggered", {
         app = test_app$app,
         expr = {
             # First, create a named group
-            session$setInputs(
+            suppressWarnings(session$setInputs(
                 clusterName = "TestGroup",
                 clusterNumbers = "1,2",
                 applyName = 1
-            )
-            session$flushReact()
+            ))
+            suppressWarnings(session$flushReact())
 
             # Verify group was created
             expect_true("TestGroup" %in% names(rv$outputList))
 
             # Set the group to remove (clusterNameRM) and trigger rmGrp
-            session$setInputs(
+            suppressWarnings(session$setInputs(
                 clusterNameRM = "TestGroup",
                 rmGrp = 1  # Increment to trigger the observer
-            )
-            session$flushReact()
+            ))
+            suppressWarnings(session$flushReact())
 
             # Verify group was removed
             expect_false("TestGroup" %in% names(rv$outputList))
@@ -86,8 +86,8 @@ test_that("server rmGrp does nothing when no group is selected", {
             initial_names <- names(rv$outputList)
 
             # Trigger rmGrp without selecting a group to remove
-            session$setInputs(rmGrp = 1)
-            session$flushReact()
+            suppressWarnings(session$setInputs(rmGrp = 1))
+            suppressWarnings(session$flushReact())
 
             # State should be unchanged
             expect_equal(names(rv$outputList), initial_names)
@@ -105,11 +105,11 @@ test_that("server rmGrp does nothing when selected group doesn't exist", {
             initial_names <- names(rv$outputList)
 
             # Try to remove a non-existent group
-            session$setInputs(
+            suppressWarnings(session$setInputs(
                 clusterNameRM = "NonExistentGroup",
                 rmGrp = 1
-            )
-            session$flushReact()
+            ))
+            suppressWarnings(session$flushReact())
 
             # State should be unchanged
             expect_equal(names(rv$outputList), initial_names)

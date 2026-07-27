@@ -253,8 +253,8 @@ test_that(".buildDimRedReactives() returns a named list of three closures", {
 
 test_that("pca reactive returns a prcomp object", {
     shiny::testServer(.make_dimred_app(), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols,
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols,
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         expect_s3_class(session$userData$reactives$pca(), "prcomp")
@@ -263,8 +263,8 @@ test_that("pca reactive returns a prcomp object", {
 
 test_that("pca rotation always has exactly 2 columns (rank. = 2)", {
     shiny::testServer(.make_dimred_app(), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols,
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols,
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         expect_equal(ncol(session$userData$reactives$pca()$rotation), 2L)
@@ -275,8 +275,8 @@ test_that("pca rotation nrow equals n_nodes (SOM nodes are the variables)", {
     n_nodes <- 20L
     shiny::testServer(.make_dimred_app(n_nodes = n_nodes), expr = {
         # Use only 5 of the 12 markers; rotation shape is governed by n_nodes
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         expect_equal(
@@ -292,8 +292,8 @@ test_that("pca rotation nrow is stable across different marker selections", {
         cols <- session$userData$cols
 
         for (n_sel in c(3L, 5L, length(cols))) {
-            session$setInputs(dimRedSelection = cols[seq_len(n_sel)],
-                              perplexity = 10L, n_neighbors = 4L)
+            suppressWarnings(session$setInputs(dimRedSelection = cols[seq_len(n_sel)],
+                              perplexity = 10L, n_neighbors = 4L))
             session$elapse(1100L)
             expect_equal(
                 nrow(session$userData$reactives$pca()$rotation),
@@ -306,8 +306,8 @@ test_that("pca rotation nrow is stable across different marker selections", {
 
 test_that("pca reactive uses scale. = FALSE (no standardisation)", {
     shiny::testServer(.make_dimred_app(), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols,
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols,
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         # prcomp(scale. = FALSE) → $scale is logical FALSE, not a numeric vector
@@ -327,8 +327,8 @@ test_that("pca reactive is numerically identical to direct stats::prcomp()", {
     )
 
     shiny::testServer(.make_dimred_app(n_cells = 60L, n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = cols_sel,
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = cols_sel,
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         actual <- session$userData$reactives$pca()
@@ -343,12 +343,12 @@ test_that("pca reactive recomputes and differs when dimRedSelection changes", {
     shiny::testServer(.make_dimred_app(), expr = {
         cols <- session$userData$cols
 
-        session$setInputs(dimRedSelection = cols[1:3],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = cols[1:3],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
         pca_a <- session$userData$reactives$pca()
 
-        session$setInputs(dimRedSelection = cols[1:7])
+        suppressWarnings(session$setInputs(dimRedSelection = cols[1:7]))
         session$elapse(1100L)
         pca_b <- session$userData$reactives$pca()
 
@@ -362,8 +362,8 @@ test_that("pca reactive recomputes and differs when dimRedSelection changes", {
 # REPLACE with property-based assertions that hold in all R versions.
 test_that("pca reactive sdev satisfies PCA invariants regardless of R version", {
     shiny::testServer(.make_dimred_app(), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols,
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols,
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         pca_res <- session$userData$reactives$pca()
@@ -396,8 +396,8 @@ test_that("pca reactive sdev satisfies PCA invariants regardless of R version", 
 # Companion: confirm rotation dimensions are independently correct.
 test_that("pca rotation has exactly 2 columns and n_nodes rows", {
     shiny::testServer(.make_dimred_app(), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols,
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols,
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         rot <- session$userData$reactives$pca()$rotation
@@ -421,8 +421,8 @@ test_that("umap reactive returns a umap object with 2-column layout", {
     skip_if_not_installed("umap")
 
     shiny::testServer(.make_dimred_app(n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         res <- session$userData$reactives$umap()
@@ -438,8 +438,8 @@ test_that("umap layout has one row per SOM node", {
     skip_if_not_installed("umap")
 
     shiny::testServer(.make_dimred_app(n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         expect_equal(
@@ -456,12 +456,12 @@ test_that("umap config records the n_neighbors value that was supplied", {
     shiny::testServer(.make_dimred_app(n_nodes = 25L), expr = {
         cols <- session$userData$cols
 
-        session$setInputs(dimRedSelection = cols[1:5],
-                          perplexity = 10L, n_neighbors = 3L)
+        suppressWarnings(session$setInputs(dimRedSelection = cols[1:5],
+                          perplexity = 10L, n_neighbors = 3L))
         session$elapse(1100L)
         r3 <- session$userData$reactives$umap()
 
-        session$setInputs(n_neighbors = 7L)
+        suppressWarnings(session$setInputs(n_neighbors = 7L))
         session$elapse(1100L)
         r7 <- session$userData$reactives$umap()
 
@@ -476,8 +476,8 @@ test_that("umap layout coordinates are all finite", {
     skip_if_not_installed("umap")
 
     shiny::testServer(.make_dimred_app(n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         expect_true(all(is.finite(session$userData$reactives$umap()$layout)))
@@ -497,8 +497,8 @@ test_that("tsne reactive returns an Rtsne object with element Y", {
     skip_on_cran()
 
     shiny::testServer(.make_dimred_app(n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         res <- session$userData$reactives$tsne()
@@ -512,8 +512,8 @@ test_that("tsne Y matrix is n_nodes x 2", {
     skip_on_cran()
 
     shiny::testServer(.make_dimred_app(n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 10L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 10L, n_neighbors = 4L))
         session$elapse(1100L)
 
         Y <- session$userData$reactives$tsne()$Y
@@ -527,8 +527,8 @@ test_that("tsne reactive does not error when perplexity is too high (tsneFunc cl
     skip_on_cran()
     # n_nodes = 10 → max valid perplexity = 3; input 50 is silently clamped
     shiny::testServer(.make_dimred_app(n_nodes = 10L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 50L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 50L, n_neighbors = 4L))
 
         expect_no_error({
             session$elapse(1100L)
@@ -541,8 +541,8 @@ test_that("tsne Y coordinates are all finite", {
     skip_on_cran()
 
     shiny::testServer(.make_dimred_app(n_nodes = 20L), expr = {
-        session$setInputs(dimRedSelection = session$userData$cols[1:5],
-                          perplexity = 5L, n_neighbors = 4L)
+        suppressWarnings(session$setInputs(dimRedSelection = session$userData$cols[1:5],
+                          perplexity = 5L, n_neighbors = 4L))
         session$elapse(1100L)
 
         expect_true(all(is.finite(session$userData$reactives$tsne()$Y)))
@@ -602,7 +602,7 @@ test_that(".buildSelectionObserver() does not mutate rsUsed before any event fir
     # .buildSelectionObserver() is patched.
     .muffle_plotly_warning({
         shiny::testServer(.make_sel_obs_app(initial_rs = initial_rs), expr = {
-            session$flushReact()
+            suppressWarnings(session$flushReact())
             expect_equal(shiny::isolate(session$userData$rsUsed()), initial_rs)
         })
     })
@@ -615,7 +615,7 @@ test_that("REGRESSION: no plotly warning from .buildSelectionObserver() trigger"
     # once the production fix is applied.
     expect_warning(
         shiny::testServer(.make_sel_obs_app(), expr = {
-            session$flushReact()
+            suppressWarnings(session$flushReact())
         }),
         regexp = "is not registered",
         label  = paste(
@@ -638,7 +638,7 @@ test_that(".buildSOMDataObservers() does not mutate rsUsed before any event fire
         shiny::testServer(
             .make_som_obs_app(nPlots = 3L, initial_rs = initial_rs),
             expr = {
-                session$flushReact()
+                suppressWarnings(session$flushReact())
                 expect_equal(shiny::isolate(session$userData$rsUsed()), initial_rs)
             }
         )
@@ -650,7 +650,7 @@ test_that(".buildSOMDataObservers() does not mutate activePlot before any event 
         shiny::testServer(
             .make_som_obs_app(nPlots = 3L, initial_ap = 42L),
             expr = {
-                session$flushReact()
+                suppressWarnings(session$flushReact())
                 expect_equal(shiny::isolate(session$userData$activePlot()), 42L)
             }
         )
@@ -661,7 +661,7 @@ test_that("REGRESSION: no plotly warning from .buildSOMDataObservers() triggers"
     # Same rationale as the .buildSelectionObserver() regression test above.
     expect_warning(expect_warning(
         shiny::testServer(.make_som_obs_app(nPlots = 2L), expr = {
-            session$flushReact()
+            suppressWarnings(session$flushReact())
         }),
         regexp = "is not registered",
         label  = paste(
