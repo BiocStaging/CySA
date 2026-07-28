@@ -20,6 +20,9 @@
 
 \item{rsUsed}{Reactive value holding the currently selected nodes.}
 
+\item{rsUsed_d}{Debounced reactive read as the selection baseline before
+applying \code{inputSelect}.}
+
 \item{inputSelect}{Function that maps event data to new selected ids.}
 
 \item{verbose}{Logical indicating whether to print debug messages.}

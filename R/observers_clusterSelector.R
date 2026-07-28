@@ -41,13 +41,13 @@
 #' @keywords internal
 #' @name INTERNAL_registerClusterSelectorObservers
 .registerClusterSelectorObservers <- function(
-    input, output, session,
-    rv, rsUsed, rsUsed_d, activePlot, dListRV, dimSelection,
-    triggerRedraw, selectedUpdate2, selectedUpdate, updatedoutputList,
-    sample2PlotDb, dfPlot, groupsInput, inputClusterNumber,
-    zoomFunc, sce, sce_subsampled, metaD, dend, dendTable,
-    clusterPatientTable, somCodesName, colsUsed, nPlots, verbose,
-    fsom = NULL, env
+        input, output, session,
+        rv, rsUsed, rsUsed_d, activePlot, dListRV, dimSelection,
+        triggerRedraw, selectedUpdate2, selectedUpdate, updatedoutputList,
+        sample2PlotDb, dfPlot, groupsInput, inputClusterNumber,
+        zoomFunc, sce, sce_subsampled, metaD, dend, dendTable,
+        clusterPatientTable, somCodesName, colsUsed, nPlots, verbose,
+        fsom = NULL, env
 ) {
     # Keep external env in sync for callers that still read env$outputList.
     shiny::observe({
@@ -75,7 +75,8 @@
         ic <- inputClusterNumber()
         ic <- suppressWarnings(as.integer(ic))
         ic <- ic[!is.na(ic)]
-        valid <- as.integer(intersect(as.character(ic), colnames(clusterPatientTable)))
+        valid <- as.integer(intersect(as.character(ic),
+                                      colnames(clusterPatientTable)))
         if (length(valid) > 0L) {
             shiny::isolate(rsUsed(valid))
         }
@@ -118,7 +119,8 @@
     # Remove a single named group.
     shiny::observeEvent(input$rmGrp, {
         cName <- input$clusterNameRM
-        if (is.null(cName) || !nzchar(cName) || !cName %in% names(rv$outputList)) {
+        if (is.null(cName) || !nzchar(cName) ||
+            !cName %in% names(rv$outputList)) {
             return(NULL)
         }
         outputList <- rv$outputList
@@ -161,18 +163,22 @@
     # Update group1/group2 choices when the grouping variable changes.
     shiny::observeEvent(input$groupsVar, {
         groupsVar <- input$groupsVar
-        if (is.null(groupsVar) || !groupsVar %in% colnames(metaD$experiment_info)) {
+        if (is.null(groupsVar) ||
+            !groupsVar %in% colnames(metaD$experiment_info)) {
             return(NULL)
         }
         levs <- levels(metaD$experiment_info[, groupsVar])
-        shiny::updateSelectInput(session = session, inputId = "group1", choices = levs)
-        shiny::updateSelectInput(session = session, inputId = "group2", choices = levs)
+        shiny::updateSelectInput(session = session, inputId = "group1",
+                                 choices = levs)
+        shiny::updateSelectInput(session = session, inputId = "group2",
+                                 choices = levs)
     })
 
     # Keep group1 and group2 mutually exclusive.
     shiny::observe({
         groupsVar <- input$groupsVar
-        if (is.null(groupsVar) || !groupsVar %in% colnames(metaD$experiment_info)) {
+        if (is.null(groupsVar) ||
+            !groupsVar %in% colnames(metaD$experiment_info)) {
             return(NULL)
         }
         levs <- levels(metaD$experiment_info[, groupsVar])
@@ -187,7 +193,8 @@
 
     shiny::observe({
         groupsVar <- input$groupsVar
-        if (is.null(groupsVar) || !groupsVar %in% colnames(metaD$experiment_info)) {
+        if (is.null(groupsVar) ||
+            !groupsVar %in% colnames(metaD$experiment_info)) {
             return(NULL)
         }
         levs <- levels(metaD$experiment_info[, groupsVar])
@@ -246,10 +253,14 @@
     # somDataMain selection observer.
     shiny::observeEvent(
         suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_selected", source = "somDataMain")
+            .safeEventData(verbose = verbose, "plotly_selected",
+                           source = "somDataMain")
         ),
         {
-            d <- .safeEventData(verbose = verbose, "plotly_selected", source = "somDataMain")
+            d <- .safeEventData(verbose = verbose, "plotly_selected",
+                                source = "somDataMain")
+            rs <- shiny::isolate(rsUsed_d())
+
             if (is.null(d)) return(NULL)
             rs <- shiny::isolate(rsUsed_d())
             shiny::req(rs)
@@ -261,7 +272,8 @@
     # somDataMain zoom observer.
     shiny::observe({
         zoom <- suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_relayout", source = "somDataMain")
+            .safeEventData(verbose = verbose, "plotly_relayout",
+                           source = "somDataMain")
         )
         zoomFunc(zoom, 1L)
     })
@@ -295,7 +307,8 @@
     # Dendrogram selection observers.
     shiny::observeEvent(
         suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_selected", source = "dendPlotly")
+            .safeEventData(verbose = verbose, "plotly_selected",
+                           source = "dendPlotly")
         ),
         {
             d <- .safeEventData(
@@ -309,20 +322,15 @@
             clicked <- as.integer(d$customdata)
             rs <- shiny::isolate(rsUsed_d())
             mode <- shiny::isolate(input$selectMode)
-            new_rs <- switch(
-                EXPR = mode,
-                "remove others" = clicked,
-                "add" = unique(c(rs, clicked)),
-                "remove" = setdiff(rs, clicked),
-                clicked
-            )
+            new_rs <- .applySelectMode(rs, clicked, mode)
             shiny::isolate(rsUsed(new_rs))
         }
     )
 
     shiny::observeEvent(
         suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_click", source = "dendPlotly")
+            .safeEventData(verbose = verbose, "plotly_click",
+                           source = "dendPlotly")
         ),
         {
             d <- .safeEventData(
@@ -330,17 +338,16 @@
                 "plotly_click",
                 source = "dendPlotly"
             )
-            if (is.null(d) || is.null(d$customdata)) return(NULL)
+            # message("DIAG d = ", if (is.null(d)) "NULL" else paste(capture.output(str(d)), collapse = " | "))
+            # message("DIAG nrow(d) = ", paste(capture.output(print(nrow(d))), collapse = " | "))
+            if (is.null(d) || nrow(d) == 0L || is.null(d$customdata)) {
+                # message("DIAG: guard triggered, returning early")
+                return(NULL)
+            }
             clicked <- as.integer(d$customdata)
             rs <- shiny::isolate(rsUsed_d())
             mode <- shiny::isolate(input$selectMode)
-            new_rs <- switch(
-                EXPR = mode,
-                "remove others" = clicked,
-                "add" = unique(c(rs, clicked)),
-                "remove" = setdiff(rs, clicked),
-                clicked
-            )
+            new_rs <- .applySelectMode(rs, clicked, mode)
             shiny::isolate(rsUsed(new_rs))
         }
     )
@@ -348,7 +355,8 @@
     # SOM raster grid selection observer.
     shiny::observeEvent(
         suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_selected", source = "dendPlotly")
+            .safeEventData(verbose = verbose, "plotly_selected",
+                           source = "somGrid")
         ),
         {
             rs <- shiny::isolate(rsUsed())
@@ -367,7 +375,8 @@
     # Scatter-plot rectangular selection observer.
     shiny::observeEvent(
         suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_selected", source = "scatterPlot")
+            .safeEventData(verbose = verbose, "plotly_selected",
+                           source = "scatterPlot")
         ),
         {
             rs <- shiny::isolate(rsUsed_d())
@@ -378,6 +387,7 @@
                 "plotly_selected",
                 source = "scatterPlot"
             )
+
             plotIdx <- activePlot()
             if (is.null(d)) return(NULL)
             shiny::req(d$curveNumber)
@@ -398,21 +408,18 @@
             ids <- SingleCellExperiment::colData(
                 sce_subsampled[, sce_subsampled$sample_id %in% sampleIds]
             )[ids, "cluster_id"]
-            ids <- switch(
-                EXPR = shiny::isolate(input$selectMode),
-                "remove others" = intersect(ids, rs),
-                "add" = unique(c(ids, rs)),
-                "remove" = setdiff(rs, ids),
-                ids
-            )
-            shiny::isolate(rsUsed(ids))
+            clicked <- unique(as.integer(ids))
+            mode <- shiny::isolate(input$selectMode)
+            new_rs <- .applySelectMode(rs, clicked, mode)
+            shiny::isolate(rsUsed(new_rs))
         }
     )
 
     # FlowSOM star plot selection observers (only when fsom is available).
     if (!is.null(fsom)) {
         shiny::observeEvent(
-            .safeEventData(verbose = verbose, "plotly_selected", source = "flowSOMStars"),
+            .safeEventData(verbose = verbose, "plotly_selected",
+                           source = "flowSOMStars"),
             {
                 d <- .safeEventData(
                     verbose = verbose,
@@ -425,19 +432,14 @@
                 clicked <- as.integer(d$customdata)
                 rs <- shiny::isolate(rsUsed_d())
                 mode <- shiny::isolate(input$selectMode)
-                new_rs <- switch(
-                    EXPR = mode,
-                    "remove others" = clicked,
-                    "add" = unique(c(rs, clicked)),
-                    "remove" = setdiff(rs, clicked),
-                    clicked
-                )
+                new_rs <- .applySelectMode(rs, clicked, mode)
                 shiny::isolate(rsUsed(new_rs))
             }
         )
 
         shiny::observeEvent(
-            .safeEventData(verbose = verbose, "plotly_click", source = "flowSOMStars"),
+            .safeEventData(verbose = verbose, "plotly_click",
+                           source = "flowSOMStars"),
             {
                 d <- .safeEventData(
                     verbose = verbose,
@@ -448,13 +450,7 @@
                 clicked <- as.integer(d$customdata)
                 rs <- shiny::isolate(rsUsed_d())
                 mode <- shiny::isolate(input$selectMode)
-                new_rs <- switch(
-                    EXPR = mode,
-                    "remove others" = clicked,
-                    "add" = unique(c(rs, clicked)),
-                    "remove" = setdiff(rs, clicked),
-                    clicked
-                )
+                new_rs <- .applySelectMode(rs, clicked, mode)
                 shiny::isolate(rsUsed(new_rs))
             }
         )

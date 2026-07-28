@@ -355,8 +355,12 @@
         inputClusterNumber <- shiny::reactive({
             txt <- input$clusterNumbers
             if (is.null(txt) || !nzchar(txt)) return(integer(0))
-            stringr::str_split(txt, ",")[[1]] %>% as.integer()
+            vals <- stringr::str_split(txt, ",")[[1]] %>%
+                trimws() %>%
+                as.integer()
+            vals[!is.na(vals)]
         }) %>% shiny::debounce(1000)
+
 
         violinPlotSelection <- shiny::reactive({
             input$violinSelection

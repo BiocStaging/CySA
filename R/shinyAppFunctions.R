@@ -10,10 +10,10 @@
 # warnings unless verbose mode is enabled.
 safe_event_data <- function(event, source = "all", verbose = FALSE) {
     if (verbose) {
-        return(event_data(event, source = source))
+        return(plotly::event_data(event, source = source))
     }
     withCallingHandlers(
-        event_data(event, source = source),
+        plotly::event_data(event, source = source),
         warning = function(w) {
             msg <- conditionMessage(w)
             if (grepl("is not registered", msg) || grepl("event_register", msg)) {

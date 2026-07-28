@@ -57,20 +57,24 @@
 #' @param sourceId Plotly source id.
 #' @param input Shiny input object.
 #' @param rsUsed Reactive value holding the currently selected nodes.
+#' @param rsUsed_d Debounced reactive read as the selection baseline before
+#'   applying \code{inputSelect}.
 #' @param inputSelect Function that maps event data to new selected ids.
 #' @param verbose Logical indicating whether to print debug messages.
 #'
 #' @keywords internal
 .buildSelectionObserver <- function(sourceId, input, rsUsed, rsUsed_d, inputSelect, verbose) {
+    message("buildSelectionObserver: registering observer for source = ", sourceId)
     shiny::observeEvent(
         suppressWarnings(
             .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
         ),
         {
+            message("observeEvent handler body ENTERED")
             d <- .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
-            if (is.null(d)) return(NULL)
+            if (is.null(d)) { message("d is NULL, returning"); return(NULL) }
             rs <- shiny::isolate(rsUsed_d())
-            if (is.null(rs)) return(NULL)
+            if (is.null(rs)) { message("rs is NULL, returning"); return(NULL) }
             d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
             shiny::isolate(rsUsed(d))
         }
@@ -128,6 +132,7 @@
                 verbose = verbose, "plotly_relayout",
                 source = paste0("somData", plotIdx)
             )
+            if (is.null(zoom)) return(NULL)
             zoomFunc(zoom, plotIdx)
         })
     })

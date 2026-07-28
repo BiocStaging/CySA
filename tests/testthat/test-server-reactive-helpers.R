@@ -401,20 +401,20 @@ test_that(".safeEventData returns NULL when event not triggered", {
     # .safeEventData needs a reactive context, so test inside testServer
     suppress_plotly_event_warnings({
         shiny::testServer(
-        app = shiny::shinyApp(
-            ui = shiny::fluidPage(),
-            server = function(input, output, session) {
-                output$testOutput <- shiny::renderPrint({
-                    result <- .safeEventData(verbose = FALSE, "plotly_selected", source = "nonexistent")
-                    expect_null(result)
-                    cat("NULL OK")
-                })
+            app = shiny::shinyApp(
+                ui = shiny::fluidPage(),
+                server = function(input, output, session) {
+                    output$testOutput <- shiny::renderPrint({
+                        result <- .safeEventData(verbose = FALSE, "plotly_selected", source = "nonexistent")
+                        expect_null(result)
+                        cat("NULL OK")
+                    })
+                }
+            ),
+            expr = {
+                session$flushReact()
             }
-        ),
-        expr = {
-            session$flushReact()
-        }
-    )
+        )
     })
 })
 
@@ -430,9 +430,17 @@ test_that(".buildZoomObservers calls zoomFunc with the relayout event and plot i
         .buildZoomObservers(nPlots = 2, input = input, zoomFunc = zoomFunc_stub, verbose = FALSE)
     }
 
-    testServer(server, {
-        session$setInputs(`.clientValue-plotly_relayout-somData1` = list(`xaxis.range[0]` = 1, `xaxis.range[1]` = 5))
-        session$setInputs(`.clientValue-plotly_relayout-somData2` = list(`xaxis.range[0]` = 2, `xaxis.range[1]` = 6))
+    quiet_plotly_test({
+        testServer(server, {
+            session$setInputs(
+                `plotly_relayout-somData1` = jsonlite::toJSON(
+                    list(`xaxis.range[0]` = 1, `xaxis.range[1]` = 5), auto_unbox = TRUE
+                ),
+                `plotly_relayout-somData2` = jsonlite::toJSON(
+                    list(`xaxis.range[0]` = 2, `xaxis.range[1]` = 6), auto_unbox = TRUE
+                )
+            )
+        })
     })
 
     expect_length(calls, 2)
@@ -440,24 +448,78 @@ test_that(".buildZoomObservers calls zoomFunc with the relayout event and plot i
     expect_true(any(vapply(calls, function(c) c$plotIdx == 2, logical(1))))
 })
 
+
 # --- .buildSelectionObserver: requires the rsUsed_d parameter fix above ----
+test_that("minimal repro: does observeEvent fire at all with a mocked, non-reactive trigger", {
+    testthat::local_mocked_bindings(
+        event_data = function(event, source = "all") {
+            message("BARE MOCK CALLED")
+            list(x = 1)
+        },
+        .package = "plotly"
+    )
+
+    shiny::testServer(
+        app = shiny::shinyApp(
+            ui = shiny::fluidPage(),
+            server = function(input, output, session) {
+                val <- shiny::reactiveVal("initial")
+
+                shiny::observeEvent(
+                    plotly::event_data("plotly_selected", source = "test"),
+                    {
+                        message("BARE HANDLER FIRED")
+                        val("changed")
+                    }
+                )
+
+                output$probe <- shiny::renderPrint(val())
+            }
+        ),
+        expr = {
+            session$flushReact()
+            message("val after flush: ", shiny::isolate(val()))
+        }
+    )
+})
 
 test_that(".buildSelectionObserver updates rsUsed via inputSelect when a selection fires", {
-    server <- function(input, output, session) {
-        rsUsed   <- shiny::reactiveVal(1:5)
-        rsUsed_d <- shiny::reactive(rsUsed())  # plain reactive stands in for the real debounce in a test
-        inputSelect_stub <- function(d, rs, selectMode) c(rs, 999L)
+    testthat::local_mocked_bindings(
+        event_data = function(event, source = "all") {
+            message("MOCK event_data CALLED: ", event, " / ", source)
+            list(pointNumber = 0, curveNumber = 0)
+        },
+        .package = "plotly"
+    )
 
-        .buildSelectionObserver("mySource", input, rsUsed, rsUsed_d, inputSelect_stub, verbose = FALSE)
+    shiny::testServer(
+        app = shiny::shinyApp(
+            ui = shiny::fluidPage(),
+            server = function(input, output, session) {
+                rsUsed   <- shiny::reactiveVal(c(1, 2, 3, 4, 5))
+                rsUsed_d <- shiny::reactive(rsUsed())
 
-        # expose for assertions
-        output$rsUsedProbe <- shiny::renderPrint(rsUsed())
-    }
+                .buildSelectionObserver(
+                    sourceId    = "mySource",
+                    input       = input,
+                    rsUsed      = rsUsed,
+                    rsUsed_d    = rsUsed_d,
+                    inputSelect = function(d, rs, mode) {
+                        message("inputSelect CALLED")
+                        999
+                    },
+                    verbose     = FALSE
+                )
 
-    testServer(server, {
-        session$setInputs(`.clientValue-plotly_selected-mySource` = list(pointNumber = 0))
-        expect_output(print(output$rsUsedProbe), "999")
-    })
+                output$rsUsedProbe <- shiny::renderPrint(rsUsed())
+            }
+        ),
+        expr = {
+            session$flushReact()
+            message("rsUsed after flush: ", paste(shiny::isolate(rsUsed()), collapse = ","))
+            expect_output(print(output$rsUsedProbe), "999")
+        }
+    )
 })
 
 test_that(".buildSelectionObserver is a no-op when rsUsed_d() is NULL", {
@@ -471,9 +533,11 @@ test_that(".buildSelectionObserver is a no-op when rsUsed_d() is NULL", {
         output$calledProbe <- shiny::renderPrint(called)
     }
 
-    testServer(server, {
+    quiet_plotly_test({
+        testServer(server, {
         session$setInputs(`.clientValue-plotly_selected-mySource` = list(pointNumber = 0))
         expect_output(print(output$calledProbe), "FALSE")
+    })
     })
 })
 
@@ -485,21 +549,21 @@ test_that(".buildSOMDataObservers updates rsUsed and activePlot for the touched 
         rsUsed_d   <- shiny::reactive(rsUsed())
         activePlot <- shiny::reactiveVal(1L)
         inputSelect_stub <- function(d, rs, selectMode) c(rs, 42L)
-
         .buildSOMDataObservers(
             nPlots = 3, input = input, output = output,
             rsUsed = rsUsed, rsUsed_d = rsUsed_d, activePlot = activePlot,
             inputSelect = inputSelect_stub, verbose = FALSE
         )
-
-        output$rsUsedProbe   <- shiny::renderPrint(rsUsed())
+        output$rsUsedProbe     <- shiny::renderPrint(rsUsed())
         output$activePlotProbe <- shiny::renderPrint(activePlot())
     }
-
-    testServer(server, {
-        session$setInputs(`.clientValue-plotly_selected-somData2` = list(pointNumber = 0))
-        expect_output(print(output$rsUsedProbe), "42")
-        expect_output(print(output$activePlotProbe), "2")
+    quiet_plotly_test({
+        testServer(server, {
+            click_json <- jsonlite::toJSON(list(list(pointNumber = 0)), auto_unbox = TRUE)
+            session$setInputs(`plotly_selected-somData2` = click_json)
+            expect_output(print(output$rsUsedProbe), "42")
+            expect_output(print(output$activePlotProbe), "2")
+        })
     })
 })
 
@@ -519,9 +583,11 @@ test_that(".buildSOMDataObservers is a no-op when rsUsed_d() is NULL (shiny::req
         output$calledProbe <- shiny::renderPrint(called)
     }
 
-    testServer(server, {
+    quiet_plotly_test({
+        testServer(server, {
         session$setInputs(`.clientValue-plotly_selected-somData1` = list(pointNumber = 0))
         expect_output(print(output$calledProbe), "FALSE")
+    })
     })
 })
 

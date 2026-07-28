@@ -7,26 +7,33 @@
 library(shiny)
 
 # Build a small, deterministic app object that tests can share.
-make_test_app <- function(n_cells = 200, n_nodes = 10) {
+make_test_app <- function(n_cells = 200, n_nodes = 10, fsom = NULL) {
     set.seed(12)
     sce <- CySA_example_sce(n_cells = n_cells, n_nodes = n_nodes)
-    prepped <- prepClusterSelectorData(sce, total_cells_to_sample = 100)
 
+    # Add a factor grouping column so the groupsVar/group1/group2 observers
+    # (observers_clusterSelector.R:162-199) have something real to filter on.
+    # experiment_info's built-in columns (sample_id, some_numeric) are
+    # character/integer, never factors, so levels() on them is always NULL
+    # and those observers' guard would otherwise never pass.
+    S4Vectors::metadata(sce)$experiment_info$treatment <- factor(
+        rep(c("control", "treated"), length.out = nrow(S4Vectors::metadata(sce)$experiment_info)),
+        levels = c("control", "treated")
+    )
+
+    prepped <- prepClusterSelectorData(sce, total_cells_to_sample = 100)
     som_codes <- S4Vectors::metadata(sce)$SOM_codes
     markers <- S4Vectors::metadata(sce)$map$colsUsed
-
     dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes)))
     dendTable <- data.frame(
         id = seq_len(nrow(som_codes)),
         label = rownames(som_codes),
         stringsAsFactors = FALSE
     )
-
     clusterPatientTable <- table(
         sample_id = sce$sample_id,
         cluster_id = sce$cluster_id
     )
-
     somRasterData <- data.frame(
         x = rep(seq_len(5), length.out = nrow(som_codes)),
         y = rep(seq_len(2), each = nrow(som_codes) / 2),
@@ -35,14 +42,12 @@ make_test_app <- function(n_cells = 200, n_nodes = 10) {
     for (m in markers) {
         somRasterData[[m]] <- seq_len(nrow(som_codes)) / nrow(som_codes)
     }
-
     arr <- array(
         data = seq_len(10 * 10 * length(markers)),
         dim = c(10, 10, length(markers))
     )
     somRasterObj <- raster::brick(arr)
     names(somRasterObj) <- markers
-
     env <- new.env()
     app <- clusterSelector(
         sce = prepped$sce,
@@ -53,12 +58,21 @@ make_test_app <- function(n_cells = 200, n_nodes = 10) {
         clusterPatientTable = clusterPatientTable,
         somRasterData = somRasterData,
         somRasterObj = somRasterObj,
+        fsom = fsom,
         env = env
     )
-
-    list(app = app, env = env, sce = prepped$sce)
+    list(
+        app = app,
+        env = env,
+        sce = prepped$sce,
+        sce_subsampled = prepped$sce_subsampled
+    )
 }
 
+fsom_stub <- structure(
+    list(MST = list(l = matrix(c(0, 1, 0, 1), ncol = 2))),
+    class = "FlowSOM"
+)
 
 #' Suppress the expected "plotly event not registered" warning.
 #'
