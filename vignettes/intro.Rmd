@@ -147,6 +147,27 @@ if (interactive()) {
 }
 ```
 
+Once launched, the app lets you select cells or SOM clusters from a 2D
+scatter plot or an interactive dendrogram:
+
+```{r fig-gating, echo = FALSE, out.width = "49%", fig.show = "hold"}
+knitr::include_graphics(c(
+    "../man/figures/README-2d-plot.png",
+    "../man/figures/README-dendrogram.png"
+))
+```
+
+SOM nodes can also be explored directly, or via t-SNE/UMAP/PCA projections
+of the SOM code vectors, with the current selection highlighted
+consistently across all views:
+
+```{r fig-dimred, echo = FALSE, out.width = "49%", fig.show = "hold"}
+knitr::include_graphics(c(
+    "../man/figures/README-som-2d-plots.png",
+    "../man/figures/README-dimreduction.png"
+))
+```
+
 The interactive session writes the selected cluster groupings back to the
 `outputList` object that was passed in.
 
@@ -166,6 +187,13 @@ In the app, select:
 * **group1** and **group2** -- the two groups to compare.
 * **relativeTo** -- whether to report raw counts, normalize by a numeric column
 in `experiment_info`, or normalize by another cluster group.
+
+The Stats panel shows per-sample counts and percentages for the current
+selection, along with the t-test result:
+
+```{r fig-stats, echo = FALSE, out.width = "100%"}
+knitr::include_graphics("../man/figures/README-stats-panel.png")
+```
 
 For each selected SOM node, CySA performs a two-sample t-test on the
 relative cell counts between the two groups and displays the result in the
@@ -337,6 +365,16 @@ Normalize by total cells	Set relativeTo = total_cells; counts divided by cytomet
 Normalize by another group	Name nodes 31–50 "activated", then set relativeTo = activated for a different selection
 UpSet / violin	Name both "resting" (1–20) and "activated" (31–50); UpSet shows overlap, violin shows marker separation
 
+For a closer look at the phenotype of a selection, the app also provides
+per-node marker pie charts, all marker-pair views, and SOM heatmaps:
+
+```{r fig-phenotype, echo = FALSE, out.width = "100%"}
+knitr::include_graphics(c(
+    "../man/figures/README-marker-pies.png",
+    "../man/figures/README-som-pairs-grid.png",
+    "../man/figures/README-som-heatmaps.png"
+))
+```
 
 ```{r launch-app-2, eval = FALSE}
 if (interactive()) {

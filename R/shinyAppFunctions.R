@@ -630,7 +630,7 @@ plotViolin2Func <- function(sce, somCodesName = "SOM_codes", violinSelection, up
 }
 
 
-upsetPlotFunc <- function(upsetSelection, outputList, sce) {
+upsetPlotFunc <- function(upsetSelection, outputList, sce, maxCombs = 100) {
     if (length(upsetSelection) < 2) {
         return(NULL)
     }
