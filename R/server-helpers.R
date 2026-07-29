@@ -130,6 +130,8 @@
 #' @keywords internal
 .applySelectMode <- function(rs, picked, mode) {
     mode <- if (is.null(mode)) "view" else mode
+    # Defensive: empty picks should never modify the current selection.
+    if (length(picked) == 0L) return(rs)
     switch(
         EXPR = mode,
         "remove others" = intersect(picked, rs),
@@ -170,51 +172,117 @@
 }
 
 
-# in a plain R file, e.g. R/server-helpers.R
-.writeClusterSelectorPdf <- function(file, dimSel, rs, sce, sceRN, sceCN, metaD,
-                                     somCodesName, dendPlotObj, countBarPlotObj,
-                                     PercentBarPlotObj, tsnePlotObj, umapPlotObj,
-                                     pcaPlotObj, scatterPlotObj, somRasterXy,
-                                     baseRasterGgplot, dlColorVar, dlSizeVar, pctl,
-                                     dlOutputList, dlUpsetSel, dlViolinSel, colsUsed) {
+#' Write All ClusterSelector Plots to a PDF
+#'
+#' Builds the full "Download Plots" PDF export: the dendrogram, count/percent
+#' bar charts, every preset SOM marker-pair panel (not just the currently
+#' active one), the SOM raster overlay, t-SNE/UMAP/PCA, the main scatter plot,
+#' FlowSOM pie/star plots when available, both violin plots, and the UpSet
+#' plot. Each entry in \code{plotRegistry} is wrapped in its own
+#' \code{tryCatch()} so one broken/unavailable plot is skipped with a warning
+#' rather than aborting the whole export (which previously surfaced to users
+#' as a corrupt/HTML "download").
+#'
+#' @param file Output PDF path (as required by \code{downloadHandler}'s
+#'   \code{content} argument).
+#' @param rs Integer vector of currently selected SOM node ids.
+#' @param sce Full \code{SingleCellExperiment}.
+#' @param sceRN,sceCN \code{rownames(sce)}, \code{colnames(sce)}.
+#' @param metaD \code{metadata(sce)} list.
+#' @param somCodesName Name of the SOM codes metadata slot.
+#' @param dendPlotObj A \code{dendrogram} object (already computed; this
+#'   function only plots it).
+#' @param dimPairs List of marker-pair vectors, one per SOM panel shown on
+#'   screen (i.e. \code{dListRV()}) -- ALL pairs, not just the active plot.
+#' @param getBasePlotFn Function \code{(x, y, colorVar, sizeVar) -> ggplot}
+#'   used to build each SOM panel's base plot, matching whatever the live
+#'   static-grid renderer uses.
+#' @param somRasterXy Data frame of selected-node raster coordinates (or
+#'   \code{NULL}).
+#' @param baseRasterGgplot Pre-built raster background ggplot (or
+#'   \code{NULL}).
+#' @param plotRegistry Named list of zero-argument functions, each returning
+#'   a plot object (\code{ggplot}, base plot, or a \code{plotly}/htmlwidget
+#'   whose \code{print()} method renders sensibly) or \code{NULL} to skip.
+#'   Errors thrown by any entry are caught and reported as a warning, not
+#'   propagated.
+#'
+#' @keywords internal
+.writeClusterSelectorPdf <- function(file, rs, sce, sceRN, sceCN, metaD,
+                                     somCodesName, dendPlotObj,
+                                     dimPairs, getBasePlotFn,
+                                     dlColorVar, dlSizeVar, pctl,
+                                     somRasterXy, baseRasterGgplot,
+                                     plotRegistry = list()) {
     grDevices::pdf(file = file)
     on.exit(grDevices::dev.off(), add = TRUE)
 
-    dendPlotObj %>% plot(main = "dendrogram")
-    invisible(print(countBarPlotObj))
-    invisible(print(PercentBarPlotObj))
+    tryCatch(
+        dendPlotObj %>% plot(main = "dendrogram"),
+        error = function(e) warning("Skipping 'dendrogram': ", conditionMessage(e))
+    )
 
     tailP <- (1 - pctl) / 2
     somCodes <- metaD[[somCodesName]]
-    for (plotIdx in seq_along(dimSel)) {
-        dims <- dimSel[[plotIdx]]$dims
-        pp1 <- plotSOMScatter(x = sce, chs = c(dims[1L], dims[2L]),
-                              pointSize = dlSizeVar, color_by = dlColorVar,
-                              xRN = sceRN, xCN = sceCN)
-        xlimP <- if (dims[1L] %in% colnames(somCodes))
-            stats::quantile(somCodes[, dims[1L]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-        ylimP <- if (dims[2L] %in% colnames(somCodes))
-            stats::quantile(somCodes[, dims[2L]], probs = c(tailP, 1 - tailP), na.rm = TRUE) else NULL
-        invisible(print(ggsomPlot(pp1, plotIdx, rs, dimSelection = dimSel,
-                                  sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP)))
+    for (i in seq_along(dimPairs)) {
+        pair <- dimPairs[[i]]
+        tryCatch({
+            pp1 <- getBasePlotFn(pair[1L], pair[2L], dlColorVar, dlSizeVar)
+            xlimP <- if (pair[1L] %in% colnames(somCodes)) {
+                stats::quantile(somCodes[, pair[1L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            } else NULL
+            ylimP <- if (pair[2L] %in% colnames(somCodes)) {
+                stats::quantile(somCodes[, pair[2L]], probs = c(tailP, 1 - tailP), na.rm = TRUE)
+            } else NULL
+            invisible(print(ggsomPlot(
+                pp1, 1L, rs,
+                dimSelection = list(list(dims = pair)),
+                sce = sce, metaD = metaD, xlim = xlimP, ylim = ylimP
+            )))
+        }, error = function(e) {
+            warning("Skipping SOM panel ", i, " (", paste(pair, collapse = "-"),
+                    "): ", conditionMessage(e))
+        })
     }
 
-    invisible(print(tsnePlotObj)); invisible(print(umapPlotObj)); invisible(print(pcaPlotObj))
-    invisible(print(scatterPlotObj))
 
+    # -- SOM raster overlay --------------------------------------------------
     if (!is.null(somRasterXy) && !is.null(baseRasterGgplot)) {
-        invisible(print(baseRasterGgplot +
-                            ggplot2::geom_point(data = somRasterXy, ggplot2::aes(x = x, y = y),
-                                                color = "red", size = 1, inherit.aes = FALSE) +
-                            ggplot2::geom_point(data = somRasterXy, ggplot2::aes(x = x, y = y),
-                                                color = "red", shape = 3, size = 1, inherit.aes = FALSE)))
+        tryCatch({
+            invisible(print(baseRasterGgplot +
+                                ggplot2::geom_point(
+                                    data = somRasterXy, ggplot2::aes(x = x, y = y),
+                                    color = "red", size = 1, inherit.aes = FALSE
+                                ) +
+                                ggplot2::geom_point(
+                                    data = somRasterXy, ggplot2::aes(x = x, y = y),
+                                    color = "red", shape = 3, size = 1, inherit.aes = FALSE
+                                )))
+        }, error = function(e) {
+            warning("Skipping SOM raster overlay in PDF export: ", conditionMessage(e))
+        })
     }
 
-    if (length(dlUpsetSel) < 3) dlUpsetSel <- names(dlOutputList)
-    pVln  <- plotViolinFunc(sce, somCodesName, dlUpsetSel, dlOutputList, dlViolinSel)
-    if (!is.null(pVln)) invisible(print(pVln))
-    pVln2 <- plotViolin2Func(sce, somCodesName, dlViolinSel, dlUpsetSel, dlOutputList)
-    if (!is.null(pVln2)) invisible(print(pVln2))
-    pUpset <- upsetPlotFunc(dlUpsetSel, dlOutputList, sce)
-    if (!is.null(pUpset)) invisible(print(pUpset))
+    # -- Registry-driven plots (tSNE/UMAP/PCA/scatter/FlowSOM/violins/UpSet) -
+    for (nm in names(plotRegistry)) {
+        fn <- plotRegistry[[nm]]
+        if (is.null(fn)) next
+        p <- tryCatch(fn(), error = function(e) {
+            warning("Skipping '", nm, "' in PDF export: ", conditionMessage(e))
+            NULL
+        })
+        if (!is.null(p)) {
+            tryCatch(
+                invisible(print(p)),
+                error = function(e) {
+                    warning("Skipping '", nm, "' in PDF export (print failed): ",
+                            conditionMessage(e))
+                }
+            )
+        }
+    }
+
+    invisible(NULL)
 }
+
+

@@ -301,18 +301,29 @@ test_that("staticSomGrid builds panels/rows for the app's dList", {
 test_that(".writeClusterSelectorPdf writes a non-empty PDF", {
     fx <- make_test_app()
     tmp <- tempfile(fileext = ".pdf")
+
+    # Build a minimal getBasePlotFn that returns a simple ggplot for any dim pair.
+    getBasePlotFn <- function(xVar, yVar, colorVar, sizeVar) {
+        ggplot2::ggplot(data.frame(x = 1, y = 1), ggplot2::aes(x = x, y = y))
+    }
+
     .writeClusterSelectorPdf(
-        file = tmp, dimSel = list(list(dims = c("marker1", "marker2"))),
-        rs = 1:3, sce = fx$sce, sceRN = rownames(fx$sce), sceCN = colnames(fx$sce),
-        metaD = S4Vectors::metadata(fx$sce), somCodesName = "SOM_codes",
+        file = tmp,
+        rs = 1:3,
+        sce = fx$sce,
+        sceRN = rownames(fx$sce),
+        sceCN = colnames(fx$sce),
+        metaD = S4Vectors::metadata(fx$sce),
+        somCodesName = "SOM_codes",
         dendPlotObj = stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:20, 5)))),
-        countBarPlotObj = ggplot2::ggplot(), PercentBarPlotObj = ggplot2::ggplot(),
-        tsnePlotObj = ggplot2::ggplot(), umapPlotObj = ggplot2::ggplot(),
-        pcaPlotObj = ggplot2::ggplot(), scatterPlotObj = ggplot2::ggplot(),
-        somRasterXy = data.frame(x = 1, y = 1), baseRasterGgplot = ggplot2::ggplot(),
-        dlColorVar = "n", dlSizeVar = "max", pctl = 0.99,
-        dlOutputList = list(selected = 1:3), dlUpsetSel = character(0),
-        dlViolinSel = c("marker1", "marker2"), colsUsed = c("marker1", "marker2")
+        dimPairs = list(c("marker1", "marker2")),
+        getBasePlotFn = getBasePlotFn,
+        dlColorVar = "n",
+        dlSizeVar = "max",
+        pctl = 0.99,
+        somRasterXy = data.frame(x = 1, y = 1),
+        baseRasterGgplot = ggplot2::ggplot(),
+        plotRegistry = list()
     )
     expect_true(file.exists(tmp))
     expect_gt(file.info(tmp)$size, 0)

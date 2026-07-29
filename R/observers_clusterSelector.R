@@ -409,6 +409,10 @@
             maxx <- max(d$x)
             miny <- min(d$y)
             maxy <- max(d$y)
+            # Zero-area (degenerate) selections from a single point or
+            # colinear points should be ignored rather than wipe the
+            # current selection downstream.
+            if (minx == maxx || miny == maxy) return(NULL)
             df_local <- dfPlot()
             dims <- dimSel[[plotIdx]]$dims
             ids <- which(

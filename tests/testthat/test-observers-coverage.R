@@ -927,32 +927,36 @@ test_that("observers: somGrid plotly_selected with null data", {
 # =============================================================================
 # Scatter-plot rectangular selection observer (lines 368-410)
 # =============================================================================
-test_that("observers: scatterPlot plotly_selected updates selection", {
+test_that("observers: scatterPlot plotly_selected with a single (zero-area) point leaves selection unchanged", {
     test_app <- make_test_app()
-
     shiny::testServer(
         app = test_app$app,
         expr = {
-            # Establish initial selection
-            suppressWarnings(session$setInputs(clusterNumbers = "1"))
-            suppressWarnings(session$flushReact())
-
-            # Simulate rectangular selection on scatterPlot
             suppressWarnings(session$setInputs(
-                `plotly_selected-scatterPlot` = list(
-                    points = list(
-                        list(curveNumber = 1, x = 0.5, y = 0.5)
-                    ),
-                    range = list(
-                        x = c(0, 1),
-                        y = c(0, 1)
-                    )
-                )
+                clusterNumbers = "1",
+                selectMode = "add",
+                samples2plot = c("sample1")
+            ))
+            suppressWarnings(session$flushReact())
+            session$elapse(1000)
+            session$elapse(1500)
+            suppressWarnings(session$flushReact())
+            initial_rs <- rsUsed()
+
+            # A single point collapses the derived box to zero width/height.
+            # The observer now explicitly guards against this and returns
+            # early, leaving the selection unchanged.
+            single_point_json <- jsonlite::toJSON(
+                list(list(curveNumber = 1, x = 0.5, y = 0.5)),
+                auto_unbox = TRUE
+            )
+            suppressWarnings(session$setInputs(
+                `plotly_selected-scatterPlot` = single_point_json
             ))
             suppressWarnings(session$flushReact())
 
-            # Selection should be updated
-            expect_true(length(rsUsed()) >= 0)  # May be empty if no points in range
+            # Degenerate selection should not modify rsUsed()
+            expect_equal(rsUsed(), initial_rs)
         }
     )
 })
