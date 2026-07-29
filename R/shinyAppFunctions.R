@@ -47,7 +47,9 @@ quiet_ggplotly <- function(p, ...) {
         tr[["colour"]] <- NULL
         tr
     })
-
+    result <- result %>%
+        plotly::layout(autosize = TRUE) %>%
+        plotly::config(responsive = TRUE)
     # Force early evaluation of the lazy plotly object. plotly_build() is what
     # actually resolves trace type/mode and emits the "No trace type
     # specified"/"No scatter mode specified" messages -- doing it here, inside

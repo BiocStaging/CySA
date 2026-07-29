@@ -98,29 +98,43 @@
 
     # Main 2-D scatter plot.
     output$scatter <- plotly::renderPlotly({
+        # message("DIAG[scatter] renderPlotly block ENTERED at ", Sys.time())
+
         rs <- rsUsed()
+        # message("DIAG[scatter] rs = ", if (is.null(rs)) "NULL" else if (length(rs) == 0) "empty" else paste(rs, collapse = ","))
         shiny::req(rs)
+
         dimSel <- dimSelection()
         sampleIds <- input$samples2plot
-        plotIdx <- activePlot()
-        shiny::req(dimSel, length(dimSel) >= plotIdx)
+        # message("DIAG[scatter] dimSel length = ", length(dimSel),
+        #         " | dimSel[[1]]$dims = ", if (length(dimSel) >= 1L) paste(dimSel[[1L]]$dims, collapse = ", ") else "none",
+        #         " | sampleIds = ", if (is.null(sampleIds)) "NULL" else paste(sampleIds, collapse = ","))
+        shiny::req(dimSel, length(dimSel) >= 1L)
+
         cidIdx <- SingleCellExperiment::colData(sce_subsampled)$cluster_id %in% rs &
             SingleCellExperiment::colData(sce_subsampled)$sample_id %in% sampleIds
+        # message("DIAG[scatter] any(cidIdx) = ", any(cidIdx), " | sum(cidIdx) = ", sum(cidIdx))
         if (!any(cidIdx)) return(plotly::plotly_empty())
 
         pp <- scatterPlot()
+        # message("DIAG[scatter] is.null(pp) = ", is.null(pp))
         if (is.null(pp)) return(plotly::plotly_empty())
 
-        chs <- dimSel[[plotIdx]]$dims
+        chs <- dimSel[[1L]]$dims
+        # message("DIAG[scatter] chs (dims used) = ", if (is.null(chs)) "NULL" else paste(chs, collapse = ", "))
         chx <- make.names(chs[1L])
         chy <- make.names(chs[2L])
         xVals <- df[cidIdx, chx, drop = TRUE]
         yVals <- df[cidIdx, chy, drop = TRUE]
+        # message("DIAG[scatter] length(xVals) = ", length(xVals), " | length(yVals) = ", length(yVals))
+
         pctl <- input$scatterPercentile
         if (is.null(pctl)) pctl <- 0.99
         tailP <- (1 - pctl) / 2
         xlimP <- stats::quantile(xVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
         ylimP <- stats::quantile(yVals, probs = c(tailP, 1 - tailP), na.rm = TRUE)
+        # message("DIAG[scatter] xlimP = ", paste(xlimP, collapse = ", "), " | ylimP = ", paste(ylimP, collapse = ", "))
+
         xpoints <- sort(rep(seq(from = xlimP[1L], to = xlimP[2L], length.out = 100L), 100L))
         ypoints <- rep(seq(from = ylimP[1L], to = ylimP[2L], length.out = 100L), 100L)
 

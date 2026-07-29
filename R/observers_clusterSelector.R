@@ -62,13 +62,25 @@
         }
     })
 
-    # Update active plot when the user picks a preset pair.
     shiny::observeEvent(input$dimPairSelect, {
         val <- input$dimPairSelect
-        if (!is.null(val) && val %in% seq_len(nPlots)) {
+        dList <- dListRV()
+        # message("DIAG[dimPairSelect] val = ", if (is.null(val)) "NULL" else val,
+                # " | length(dList) = ", length(dList))
+        if (!is.null(val) && val %in% seq_along(dList)) {
+            pair <- dList[[as.integer(val)]]
+            # message("DIAG[dimPairSelect] pair = ", paste(pair, collapse = ", "),
+            #         " | current input$currentDimX = ", if (is.null(input$currentDimX)) "NULL" else input$currentDimX,
+            #         " | current input$currentDimY = ", if (is.null(input$currentDimY)) "NULL" else input$currentDimY)
+            shiny::updateSelectInput(session = session, inputId = "currentDimX", selected = pair[1L])
+            shiny::updateSelectInput(session = session, inputId = "currentDimY", selected = pair[2L])
             activePlot(as.integer(val))
+            # message("DIAG[dimPairSelect] called updateSelectInput + activePlot(", val, ")")
+        } else {
+            # message("DIAG[dimPairSelect] guard failed -- val not in seq_along(dList)")
         }
     })
+
 
     # Observe typed cluster ids and update the current selection.
     shiny::observe({

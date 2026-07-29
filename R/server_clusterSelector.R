@@ -142,12 +142,19 @@
         dimSelection <- shiny::reactiveVal(list())
         shiny::observe({
             dims <- activeDims()
+            # message("DIAG[dimSelection] activeDims() = ", if (is.null(dims)) "NULL" else paste(dims, collapse = ", "))
             shiny::req(dims[1L], dims[2L])
             lim1 <- channelLimits[[dims[1L]]]
             lim2 <- channelLimits[[dims[2L]]]
             shiny::req(lim1, lim2)
             existing <- shiny::isolate(dimSelection())
-            if (length(existing) >= 1L && identical(existing[[1L]]$dims, dims)) return()
+            # message("DIAG[dimSelection] existing length = ", length(existing),
+            #         " | existing[[1]]$dims = ", if (length(existing) >= 1L) paste(existing[[1L]]$dims, collapse = ", ") else "none",
+            #         " | identical to new dims? ", if (length(existing) >= 1L) identical(existing[[1L]]$dims, dims) else "n/a")
+            if (length(existing) >= 1L && identical(existing[[1L]]$dims, dims)){
+                # message("DIAG[dimSelection] EARLY RETURN -- dims unchanged, dimSelection() not updated")
+                return()
+            }
             dimSelection(list(list(
                 dims  = dims,
                 xlim  = c(lim1["min"], lim1["max"]),
@@ -155,6 +162,8 @@
                 xzoom = c(NULL, NULL),
                 yzoom = c(NULL, NULL)
             )))
+            # message("DIAG[dimSelection] wrote new dimSelection() for dims = ", paste(dims, collapse = ", "))
+
         })
 
         # Dimension-reduction reactives ----------------------------------------
@@ -256,11 +265,11 @@
             sampleIds <- input$samples2plot
             shiny::req(sampleIds)
             plotIdx <- activePlot()
-            shiny::req(dimSel, length(dimSel) >= plotIdx)
+            shiny::req(dimSel, length(dimSel) >= 1L)
             cidIdx <- colData(sce_subsampled)$cluster_id %in% rs &
                 colData(sce_subsampled)$sample_id %in% sampleIds
             if (sum(cidIdx) < 1) return(NULL)
-            chs <- dimSel[[plotIdx]]$dims
+            chs <- dimSel[[1L]]$dims
             chx <- make.names(chs[1])
             chy <- make.names(chs[2])
             xVals <- df[cidIdx, chx, drop = TRUE]

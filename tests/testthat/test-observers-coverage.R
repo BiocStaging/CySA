@@ -800,23 +800,30 @@ test_that("observers: dendPlotly plotly_click updates rsUsed", {
 })
 
 
-
-test_that("observers: dendPlotly plotly_click with null data", {
+test_that("observers: dendPlotly plotly_click with null data leaves state unchanged", {
     test_app <- make_test_app()
-
     shiny::testServer(
         app = test_app$app,
         expr = {
             suppressWarnings(session$setInputs(
-                `plotly_click-dendPlotly` = list(points = list())
+                clusterNumbers = "1",
+                selectMode = "add"
+            ))
+            suppressWarnings(session$flushReact())
+            session$elapse(1000)
+            session$elapse(1500)
+            suppressWarnings(session$flushReact())
+            initial_rs <- rsUsed()
+
+            suppressWarnings(session$setInputs(
+                `plotly_click-dendPlotly` = "[]"
             ))
             suppressWarnings(session$flushReact())
 
-            expect_true(TRUE)
+            expect_equal(rsUsed(), initial_rs)
         }
     )
 })
-
 
 test_that("observers: dendPlotly plotly_click respects selectMode", {
     test_app <- make_test_app()
@@ -951,23 +958,32 @@ test_that("observers: scatterPlot plotly_selected updates selection", {
 })
 
 
-test_that("observers: scatterPlot plotly_selected with null curveNumber", {
+test_that("observers: scatterPlot plotly_selected with missing curveNumber leaves state unchanged", {
     test_app <- make_test_app()
-
     shiny::testServer(
         app = test_app$app,
         expr = {
             suppressWarnings(session$setInputs(
-                `plotly_selected-scatterPlot` = list(
-                    points = list(
-                        list(x = 0.5, y = 0.5)
-                    )
-                )
+                clusterNumbers = "1",
+                selectMode = "add",
+                samples2plot = c("sample1")
+            ))
+            suppressWarnings(session$flushReact())
+            session$elapse(1000)
+            session$elapse(1500)
+            suppressWarnings(session$flushReact())
+            initial_rs <- rsUsed()
+
+            no_curve_json <- jsonlite::toJSON(
+                list(list(x = 0.5, y = 0.5)),
+                auto_unbox = TRUE
+            )
+            suppressWarnings(session$setInputs(
+                `plotly_selected-scatterPlot` = no_curve_json
             ))
             suppressWarnings(session$flushReact())
 
-            # Should return NULL without error
-            expect_true(TRUE)
+            expect_equal(rsUsed(), initial_rs)
         }
     )
 })

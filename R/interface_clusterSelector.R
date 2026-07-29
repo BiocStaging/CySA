@@ -87,6 +87,21 @@
             text      = "shinyjs.closeWindow = function() { window.close(); }",
             functions = c("closeWindow")
         ),
+        shiny::tags$script(shiny::HTML("
+            (function() {
+                var resizeTimer = null;
+                function resetAndResizePlots() {
+                    $('.ui-resizable').css({ width: '100%', height: '100%' });
+                    $('.js-plotly-plot').each(function() {
+                        Plotly.Plots.resize(this);
+                    });
+                }
+                $(window).on('resize', function() {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(resetAndResizePlots, 200);
+                });
+            })();
+        ")),
         shinydashboard::sidebarMenu(
             id = "tabs",
             shinydashboard::menuItem(
