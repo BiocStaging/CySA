@@ -4,7 +4,7 @@
 # assistant. All code is redistributed under the package LICENSE.
 
 # functions used in shiny app
-
+#' @importFrom tidyselect all_of
 # safe_event_data ----
 # Wrapper around plotly::event_data that suppresses the "not registered"
 # warnings unless verbose mode is enabled.
@@ -636,6 +636,15 @@ upsetPlotFunc <- function(upsetSelection, outputList, sce) {
     }
     if (length(upsetSelection) > 31) upsetSelection <- head(upsetSelection, 31)
     cm <- ComplexHeatmap::make_comb_mat(outputList[upsetSelection])
+
+    nCombs <- length(ComplexHeatmap::comb_name(cm))
+    if (nCombs > maxCombs) {
+        stop(
+            "Too many distinct group overlap combinations (", nCombs,
+            ") to render an UpSet plot; select fewer/less-overlapping groups ",
+            "(currently allows up to ", maxCombs, ")."
+        )
+    }
     ncells <- rep(0, length(ComplexHeatmap::comb_name(cm)))
     grpCells <- rep(0, length(upsetSelection))
     for (cidx in seq_along(ComplexHeatmap::comb_name(cm))) {

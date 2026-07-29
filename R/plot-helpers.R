@@ -52,6 +52,7 @@
 #' @param maxPies Maximum number of pies to plot. When more nodes are selected,
 #'   only the first \code{maxPies} are shown. Default is 5.
 #'
+#' @importFrom tidyselect all_of
 #' @return A \code{ggplot} object or \code{NULL}.
 #' @keywords internal
 .buildFlowSOMPiePlot <- function(somCodes, rs, colsUsed, ncol = NULL, maxPies = 5L) {

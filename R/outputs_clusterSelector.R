@@ -694,24 +694,47 @@
     # Download handler.
     output$downloadPlots <- shiny::downloadHandler(
         filename = function() {
-            shiny::req(input$clusterNameSelect)
-            paste(input$clusterNameSelect, ".pdf", sep = "")
+            nm <- input$clusterNameSelect
+            if (is.null(nm) || !nzchar(nm)) nm <- "clusterSelector_plots"
+            paste0(nm, ".pdf")
         },
         content = function(file) {
-            dimSel <- dimSelection()
             rs <- rsUsed()
             shiny::req(rs)
+
+            dlColorVar <- input$somColorVar %||% "n"
+            dlSizeVar  <- input$somSizeVar %||% "max"
+            pctl       <- input$scatterPercentile %||% 0.99
+
+            upsetSel   <- input$upsetSelection
+            violinSel  <- input$violinSelection %||% colsUsed
+            dlOutputList <- rv$outputList
+            if (length(upsetSel) < 3) upsetSel <- names(dlOutputList)
+
+            plotRegistry <- list(
+                countBar   = countBarPlot,
+                percentBar = PercentBarPlot,
+                tsne       = tsnePlot,
+                umap       = umapPlot,
+                pca        = pcaPlot,
+                scatter    = scatterPlot,
+                flowSOMPie = flowSOMPiePlot,
+                flowSOMStars = if (!is.null(fsom)) {
+                    function() FlowSOM::PlotStars(fsom, backgroundValues = fsom$metaclustering)$tree
+                } else NULL,
+                violin1 = function() plotViolinFunc(sce, somCodesName, upsetSel, dlOutputList, violinSel),
+                violin2 = function() plotViolin2Func(sce, somCodesName, violinSel, upsetSel, dlOutputList),
+                upset   = function() upsetPlotFunc(upsetSel, dlOutputList, sce)
+            )
+
             .writeClusterSelectorPdf(
-                file = file, dimSel = dimSel, rs = rs, sce = sce, sceRN = sceRN, sceCN = sceCN,
+                file = file, rs = rs, sce = sce, sceRN = sceRN, sceCN = sceCN,
                 metaD = metaD, somCodesName = somCodesName,
-                dendPlotObj = dendPlot(), countBarPlotObj = countBarPlot(),
-                PercentBarPlotObj = PercentBarPlot(), tsnePlotObj = tsnePlot(),
-                umapPlotObj = umapPlot(), pcaPlotObj = pcaPlot(), scatterPlotObj = scatterPlot(),
+                dendPlotObj = dendPlot(),
+                dimPairs = dListRV(), getBasePlotFn = getBasePlot,
+                dlColorVar = dlColorVar, dlSizeVar = dlSizeVar, pctl = pctl,
                 somRasterXy = somRasterPlot(), baseRasterGgplot = baseRasterGgplot,
-                dlColorVar = input$somColorVar %||% "n", dlSizeVar = input$somSizeVar %||% "max",
-                pctl = input$scatterPercentile %||% 0.99,
-                dlOutputList = rv$outputList, dlUpsetSel = input$upsetSelection,
-                dlViolinSel = input$violinSelection %||% colsUsed, colsUsed = colsUsed
+                plotRegistry = plotRegistry
             )
         }
     )

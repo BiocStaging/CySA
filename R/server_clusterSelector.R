@@ -27,6 +27,8 @@
 #' @param env Environment used to store mutable state (legacy argument).
 #' @param verbose Logical indicating whether to show detailed runtime messages.
 #'
+#' @importFrom tidyselect all_of
+#'
 #' @return A \code{shiny} server function.
 #'
 #' @keywords internal

@@ -296,7 +296,7 @@
             )
         ),
         shiny::column(
-            width = 3,
+            width = 6,
             shinydashboardPlus::box(
                 title = "interactive dendrogram", solidHeader = TRUE,
                 width = 12, status = "primary",
@@ -859,7 +859,7 @@
             shiny::plotOutput("somRaster", height = "1200px") %>% shinyjqui::jqui_resizable()
         )),
         shiny::fluidRow(shiny::column(
-            width = 3,
+            width = 12,
             selectionHint,
             plotly::plotlyOutput("somRasterSelect", height = "400px") %>% shinyjqui::jqui_resizable()
         ))
