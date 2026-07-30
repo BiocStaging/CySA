@@ -331,10 +331,10 @@ test_that("buildProjectionDf requires som_codes and SOM_stats", {
     dimSelection <- list(list(dims = c("marker1", "marker2")))
     # shiny::req() stops silently; verify the function does not return a data frame.
     expect_warning(
-    expect_error(
-        buildProjectionDf(ggplot2::ggplot(), plotIdx = 1L, dimSelection = dimSelection, sce = sce),
-        regexp = NA
-    ), "not found in metadata")
+        expect_error(
+            buildProjectionDf(ggplot2::ggplot(), plotIdx = 1L, dimSelection = dimSelection, sce = sce),
+            regexp = NA
+        ), "not found in metadata")
 })
 
 test_that("buildProjectionDf returns expected column order", {
@@ -357,7 +357,7 @@ test_that("drawProjection colours by groups when colorbyGroups supplied", {
     sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
     df <- buildProjectionDf(ggplot2::ggplot(), 1L, list(list(dims = c("marker1", "marker2"))), sce)
 
-        p <- drawProjection(
+    p <- drawProjection(
         df, rs = 1L, colorbyGroups = c("A"),
         sce = sce, outputList = list(A = 1:2, B = 3:4))
 
@@ -383,11 +383,11 @@ test_that("plotViolinFunc returns placeholder when upsetSelection too short", {
     sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
     outputList <- list(A = c(1L, 2L), B = c(3L, 4L))
     expect_message(
-    p <- plotViolinFunc(
-        sce = sce, upsetSelection = "A", outputList = outputList,
-        violinSelection = colnames(S4Vectors::metadata(sce)$SOM_codes)[1:2]
-    ),
-    "please check that all upsetSelection are in outputList:")
+        p <- plotViolinFunc(
+            sce = sce, upsetSelection = "A", outputList = outputList,
+            violinSelection = colnames(S4Vectors::metadata(sce)$SOM_codes)[1:2]
+        ),
+        "please check that all upsetSelection are in outputList:")
     expect_true(is.null(p) || inherits(p, "ggplot"))
 })
 
@@ -417,18 +417,42 @@ test_that("plotViolin2Func returns ggplot", {
 # upsetPlotFunc
 # ══════════════════════════════════════════════════════════════════════════════
 
-# test_that("upsetPlotFunc returns NULL for fewer than two groups", {
-#     expect_null(upsetPlotFunc("A", list(A = 1L), CySA_example_sce(n_cells = 100, n_nodes = 4)))
-# })
+test_that("upsetPlotFunc returns NULL for fewer than two groups", {
+    skip_if_not_installed("ComplexHeatmap")
+    skip_if(
+        R.version$status == "Under development (unstable)",
+        paste(
+            "Known ComplexHeatmap/circlize 'node stack overflow' on R-devel",
+            "(reproduces with ComplexHeatmap 2.29.0 + circlize 0.4.18 on both",
+            "linux-devel and windows-devel CI runners; passes on release/oldrel).",
+            "Root cause appears tied to degenerate/tied input values feeding",
+            "ComplexHeatmap's internal dendrogram/ordering logic -- see",
+            "jokergoo/ComplexHeatmap issues #199, #539, #541 for the historical",
+            "pattern. Not reproducible locally on R-release."
+        )
+    )
+    expect_null(upsetPlotFunc("A", list(A = 1L), CySA_example_sce(n_cells = 100, n_nodes = 4)))
+})
 
 test_that("upsetPlotFunc returns ComplexHeatmap object for valid groups", {
     skip_if_not_installed("ComplexHeatmap")
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
-    S4Vectors::metadata(sce)$SOM_stats$n <- c(37L, 61L, 45L, 58L, 29L, 70L)  # distinct, no ties
-    outputList <- list(A = c(1L, 2L, 3L), B = c(2L, 3L, 5L))  # different overlap shape too
+    skip_if(
+        R.version$status == "Under development (unstable)",
+        paste(
+            "Known ComplexHeatmap/circlize 'node stack overflow' on R-devel",
+            "(reproduces with ComplexHeatmap 2.29.0 + circlize 0.4.18 on both",
+            "linux-devel and windows-devel CI runners; passes on release/oldrel).",
+            "Root cause appears tied to degenerate/tied input values feeding",
+            "ComplexHeatmap's internal dendrogram/ordering logic -- see",
+            "jokergoo/ComplexHeatmap issues #199, #539, #541 for the historical",
+            "pattern. Not reproducible locally on R-release."
+        )
+    )
 
-    p <- upsetPlotFunc(names(outputList), outputList, sce)
-    expect_s4_class(p, "Heatmap")
+    sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
+    S4Vectors::metadata(sce)$SOM_stats$n <- c(37L, 61L, 45L, 58L, 29L, 70L)
+    outputList <- list(A = c(1L, 2L, 3L), B = c(2L, 3L, 5L))
+
     p <- upsetPlotFunc(names(outputList), outputList, sce)
     expect_s4_class(p, "Heatmap")
 })
