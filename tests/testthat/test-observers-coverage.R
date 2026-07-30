@@ -863,6 +863,8 @@ test_that("observers: somGrid plotly_selected updates rsUsed", {
         app = test_app$app,
         expr = {
             suppressWarnings(session$setInputs(clusterNumbers = "2"))
+            session$elapse(1000)   # inputClusterNumber debounce
+            session$elapse(1500)   # rsUsed_d debounce
             suppressWarnings(session$flushReact())
 
             suppressWarnings(session$setInputs(
@@ -888,6 +890,8 @@ test_that("observers: somGrid plotly_selected with null rsUsed", {
         expr = {
             # Clear selection first
             suppressWarnings(session$setInputs(clusterNumbers = ""))
+            session$elapse(1000)   # inputClusterNumber debounce
+            session$elapse(1500)   # rsUsed_d debounce
             suppressWarnings(session$flushReact())
 
             # Try to select on grid
@@ -1137,6 +1141,8 @@ test_that("observers: clusterNumbers handles mixed valid/invalid input", {
         app = test_app$app,
         expr = {
             suppressWarnings(session$setInputs(clusterNumbers = "1,abc,2"))
+            session$elapse(1000)   # inputClusterNumber debounce
+            session$elapse(1500)   # rsUsed_d debounce
             suppressWarnings(session$flushReact())
 
             # Should extract valid integers
@@ -1154,6 +1160,8 @@ test_that("observers: clusterNumbers handles out-of-range clusters", {
         expr = {
             # Clusters not in clusterPatientTable should be ignored
             suppressWarnings(session$setInputs(clusterNumbers = "999,1000"))
+            session$elapse(1000)   # inputClusterNumber debounce
+            session$elapse(1500)   # rsUsed_d debounce
             suppressWarnings(session$flushReact())
 
             # Should result in empty or unchanged selection
