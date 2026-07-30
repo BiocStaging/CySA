@@ -424,7 +424,11 @@ test_that("plotViolin2Func returns ggplot", {
 test_that("upsetPlotFunc returns ComplexHeatmap object for valid groups", {
     skip_if_not_installed("ComplexHeatmap")
     sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
-    outputList <- list(A = c(1L, 2L, 3L), B = c(2L, 3L, 4L))
+    S4Vectors::metadata(sce)$SOM_stats$n <- c(37L, 61L, 45L, 58L, 29L, 70L)  # distinct, no ties
+    outputList <- list(A = c(1L, 2L, 3L), B = c(2L, 3L, 5L))  # different overlap shape too
+
+    p <- upsetPlotFunc(names(outputList), outputList, sce)
+    expect_s4_class(p, "Heatmap")
     p <- upsetPlotFunc(names(outputList), outputList, sce)
     expect_s4_class(p, "Heatmap")
 })
