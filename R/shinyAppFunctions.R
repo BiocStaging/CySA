@@ -634,6 +634,10 @@ upsetPlotFunc <- function(upsetSelection, outputList, sce, maxCombs = 100) {
     if (length(upsetSelection) < 2) {
         return(NULL)
     }
+    if (is.null(grDevices::dev.list())) {
+        grDevices::pdf(NULL)
+        on.exit(grDevices::dev.off(), add = TRUE)
+    }
     if (length(upsetSelection) > 31) upsetSelection <- head(upsetSelection, 31)
     cm <- ComplexHeatmap::make_comb_mat(outputList[upsetSelection])
 

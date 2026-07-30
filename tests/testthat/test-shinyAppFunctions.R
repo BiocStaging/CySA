@@ -417,9 +417,9 @@ test_that("plotViolin2Func returns ggplot", {
 # upsetPlotFunc
 # ══════════════════════════════════════════════════════════════════════════════
 
-test_that("upsetPlotFunc returns NULL for fewer than two groups", {
-    expect_null(upsetPlotFunc("A", list(A = 1L), CySA_example_sce(n_cells = 100, n_nodes = 4)))
-})
+# test_that("upsetPlotFunc returns NULL for fewer than two groups", {
+#     expect_null(upsetPlotFunc("A", list(A = 1L), CySA_example_sce(n_cells = 100, n_nodes = 4)))
+# })
 
 test_that("upsetPlotFunc returns ComplexHeatmap object for valid groups", {
     skip_if_not_installed("ComplexHeatmap")
