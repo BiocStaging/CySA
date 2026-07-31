@@ -1,3 +1,6 @@
+---
+output: github_document
+---
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
@@ -7,13 +10,9 @@
 
 <!-- badges: end -->
 
-**CySA** provides an interactive Shiny application for selecting and
-visualizing clusters from flow-cytometry data stored in
-[`SingleCellExperiment`](https://bioconductor.org/packages/SingleCellExperiment)
-objects. It is designed to work with SOM-based clustering outputs such
-as those produced by
-[FlowSOM](https://bioconductor.org/packages/FlowSOM) and curated by the
-[CATALYST](https://bioconductor.org/packages/CATALYST) workflow.
+**CySA** provides an interactive Shiny application for selecting and visualizing clusters from flow-cytometry data stored in [`SingleCellExperiment`](https://bioconductor.org/packages/SingleCellExperiment) objects. It is designed to work with SOM-based clustering outputs such as those produced by [FlowSOM](https://bioconductor.org/packages/FlowSOM) and curated by the [CATALYST](https://bioconductor.org/packages/CATALYST) workflow.
+
+![CySA main interface showing SOM cluster visualization with manual gating, dimension reduction plots, and marker expression heatmaps](man/figures/README-som-pairs-grid.png)
 
 ## Installation
 
@@ -50,16 +49,38 @@ app <- clusterSelector(
 shiny::runApp(app)
 ```
 
+## Screenshots
+
+The app is organized into linked panels for gating, SOM-based clustering, and downstream statistics.
+
+### Manual gating and hierarchical clustering
+
+Select cells directly on a 2D scatter plot, or select whole SOM clusters from an interactive dendrogram:
+
+<img src="man/figures/README-2d-plot.png" width="49%"/> <img src="man/figures/README-dendrogram.png" width="49%"/>
+
+### SOM node views and dimension reduction
+
+SOM nodes can be explored in raw marker space or via t-SNE/UMAP/PCA projections of the SOM code vectors, with the current selection highlighted consistently across views:
+
+<img src="man/figures/README-som-2d-plots.png" width="49%"/> <img src="man/figures/README-dimreduction.png" width="49%"/>
+
+### Marker-level exploration of a selection
+
+All marker-pair combinations, per-node marker pie charts, and SOM heatmaps help characterize the phenotype of a selected cluster:
+
+<img src="man/figures/README-som-pairs-grid.png" width="100%"/> <img src="man/figures/README-marker-pies.png" width="100%"/> <img src="man/figures/README-som-heatmaps.png" width="100%"/>
+
+### Statistics
+
+Selected clusters can be compared between sample groups (e.g. control vs. treated) with per-sample counts, percentages, and a two-sample t-test:
+
+<img src="man/figures/README-stats-panel.png" width="100%"/>
+
 ## Provenance
 
-CySA is derived from the `clusterSelector` Shiny module originally
-developed in `CyDa`. The code was subsequently extracted into a
-standalone Bioconductor package and refactored with assistance from the
-opencode AI coding assistant. All redistributed and AI-assisted code
-remains under the package license (see `LICENSE`) and the maintainer is
-responsible for its maintenance.
+CySA is derived from the `clusterSelector` Shiny module originally developed in `CyDa`. The code was subsequently extracted into a standalone Bioconductor package and refactored with assistance from the opencode AI coding assistant. All redistributed and AI-assisted code remains under the package license (see `LICENSE`) and the maintainer is responsible for its maintenance.
 
 ## Citation
 
-If you use CySA in your research, please cite the package and the
-relevant Bioconductor workflows.
+If you use CySA in your research, please cite the package and the relevant Bioconductor workflows.

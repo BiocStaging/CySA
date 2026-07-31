@@ -1,12 +1,16 @@
 Package: CySA
 Title: Interactive Cluster Selector for Cytometry Data
-Version: 0.99.24
+Version: 0.99.25
 Authors@R:
     person("Bernd", "Jagla", , "bernd.jagla@pasteur.fr", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7696-0484"))
-Description: Provides an interactive Shiny application for selecting and
-    visualizing clusters from flow cytometry data stored in
-    SingleCellExperiment objects.
+Description: CySA provides an interactive Shiny-based tool for analyzing
+    flow and mass cytometry data. It supports self-organizing map (SOM)
+    based clustering, dimension reduction (t-SNE, UMAP, PCA), and
+    statistical comparison of cell populations across sample groups.
+    Users can select cell clusters interactively via 2D scatter plots,
+    dendrograms, or SOM node grids, and explore marker expression
+    patterns across the selected populations.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
