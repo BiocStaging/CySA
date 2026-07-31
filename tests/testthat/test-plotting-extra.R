@@ -5,39 +5,39 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that("plotCytoScatter respects zeros = TRUE", {
-    skip_if_not_installed("KernSmooth")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), zeros = TRUE)
-    expect_s3_class(p, "ggplot")
+  skip_if_not_installed("KernSmooth")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), zeros = TRUE)
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("plotCytoScatter colours by numeric colData column", {
-    skip_if_not_installed("KernSmooth")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    sce$num_col <- rnorm(ncol(sce))
-    p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), color_by = "num_col")
-    expect_s3_class(p, "ggplot")
+  skip_if_not_installed("KernSmooth")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  sce$num_col <- rnorm(ncol(sce))
+  p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), color_by = "num_col")
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("plotCytoScatter colours by cluster column via CATALYST", {
-    skip_if_not_installed("KernSmooth")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), color_by = "cluster_id")
-    expect_s3_class(p, "ggplot")
+  skip_if_not_installed("KernSmooth")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), color_by = "cluster_id")
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("plotCytoScatter facets when >2 channels", {
-    skip_if_not_installed("KernSmooth")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    p <- plotCytoScatter(sce, chs = c("marker1", "marker2", "marker3", "marker4"))
-    expect_s3_class(p, "ggplot")
+  skip_if_not_installed("KernSmooth")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  p <- plotCytoScatter(sce, chs = c("marker1", "marker2", "marker3", "marker4"))
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("plotCytoScatter uses label = 'target'", {
-    skip_if_not_installed("KernSmooth")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), label = "target")
-    expect_s3_class(p, "ggplot")
+  skip_if_not_installed("KernSmooth")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  p <- plotCytoScatter(sce, chs = c("marker1", "marker2"), label = "target")
+  expect_s3_class(p, "ggplot")
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -45,43 +45,44 @@ test_that("plotCytoScatter uses label = 'target'", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that("plotSOMScatter warns when statsSlot is missing", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    S4Vectors::metadata(sce)$SOM_stats <- NULL
-    expect_warning(
-        plotSOMScatter(sce, chs = c("marker1", "marker2"), statsSlot = "SOM_stats"),
-        "SOM_stats"
-    )
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  S4Vectors::metadata(sce)$SOM_stats <- NULL
+  expect_warning(
+    plotSOMScatter(sce, chs = c("marker1", "marker2"), statsSlot = "SOM_stats"),
+    "SOM_stats"
+  )
 })
 
 test_that("plotSOMScatter computes missing SOM code columns", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4, n_markers = 8)
-    keep <- colnames(S4Vectors::metadata(sce)$SOM_codes)[1:2]
-    S4Vectors::metadata(sce)$SOM_codes <- S4Vectors::metadata(sce)$SOM_codes[, keep, drop = FALSE]
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4, n_markers = 8)
+  keep <- colnames(S4Vectors::metadata(sce)$SOM_codes)[1:2]
+  S4Vectors::metadata(sce)$SOM_codes <- S4Vectors::metadata(sce)$SOM_codes[, keep, drop = FALSE]
+  expect_warning(
     expect_warning(
-        expect_warning(
-            p <- plotSOMScatter(sce, chs = c("marker3", "marker4")),
-            "computing SOM stats"
-        ),
-        "computing SOM stats"
-    )
-    expect_s3_class(p, "ggplot")
+      p <- plotSOMScatter(sce, chs = c("marker3", "marker4")),
+      "computing SOM stats"
+    ),
+    "computing SOM stats"
+  )
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("plotSOMScatter facets when >2 channels", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    p <- plotSOMScatter(
-        sce, chs = c("marker1", "marker2", "marker3", "marker4")
-    )
-    expect_s3_class(p, "ggplot")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  p <- plotSOMScatter(
+    sce,
+    chs = c("marker1", "marker2", "marker3", "marker4")
+  )
+  expect_s3_class(p, "ggplot")
 })
 
 test_that("plotSOMScatter returns NULL when all channels unknown", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    expect_warning(
-        p <- plotSOMScatter(sce, chs = c("no", "way")),
-        "Unknown channels/markers"
-    )
-    expect_null(p)
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  expect_warning(
+    p <- plotSOMScatter(sce, chs = c("no", "way")),
+    "Unknown channels/markers"
+  )
+  expect_null(p)
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -89,73 +90,76 @@ test_that("plotSOMScatter returns NULL when all channels unknown", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".validateClusterSelectorInputs checks fsom type", {
-    skip_if_not_installed("FlowSOM")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    # Create proper somRasterData with all marker columns
-    markers <- S4Vectors::metadata(sce)$map$colsUsed
-    somRasterData <- data.frame(
-        x = rep(seq_len(5), length.out = nrow(S4Vectors::metadata(sce)$SOM_codes)),
-        y = rep(seq_len(2), each = nrow(S4Vectors::metadata(sce)$SOM_codes) / 2)
-    )
-    for (m in markers) {
-        somRasterData[[m]] <- seq_len(nrow(S4Vectors::metadata(sce)$SOM_codes)) / nrow(S4Vectors::metadata(sce)$SOM_codes)
-    }
-    expect_error(
-        CySA:::.validateClusterSelectorInputs(
-            sce, sce, list(), list(markers[1:2]),
-            stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
-            data.frame(id = 1, label = "node1"),
-            table(sample_id = sce$sample_id, cluster_id = sce$cluster_id),
-            somRasterData,
-            "SOM_codes", 1L, fsom = "not_a_fsom"
-        ),
-        "FlowSOM"
-    )
+  skip_if_not_installed("FlowSOM")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  # Create proper somRasterData with all marker columns
+  markers <- S4Vectors::metadata(sce)$map$colsUsed
+  somRasterData <- data.frame(
+    x = rep(seq_len(5), length.out = nrow(S4Vectors::metadata(sce)$SOM_codes)),
+    y = rep(seq_len(2), each = nrow(S4Vectors::metadata(sce)$SOM_codes) / 2)
+  )
+  for (m in markers) {
+    somRasterData[[m]] <- seq_len(nrow(S4Vectors::metadata(sce)$SOM_codes)) / nrow(S4Vectors::metadata(sce)$SOM_codes)
+  }
+  expect_error(
+    CySA:::.validateClusterSelectorInputs(
+      sce, sce, list(), list(markers[1:2]),
+      stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
+      data.frame(id = 1, label = "node1"),
+      table(sample_id = sce$sample_id, cluster_id = sce$cluster_id),
+      somRasterData,
+      "SOM_codes", 1L,
+      fsom = "not_a_fsom"
+    ),
+    "FlowSOM"
+  )
 })
 
 test_that(".validateClusterSelectorInputs checks fsom MST layout", {
-    skip_if_not_installed("FlowSOM")
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    # Create a FlowSOM object with missing MST$l layout
-    bad_fsom <- list(MST = list())  # Missing 'l' component
-    class(bad_fsom) <- "FlowSOM"
-    # Create proper somRasterData with all marker columns
-    markers <- S4Vectors::metadata(sce)$map$colsUsed
-    somRasterData <- data.frame(
-        x = rep(seq_len(5), length.out = nrow(S4Vectors::metadata(sce)$SOM_codes)),
-        y = rep(seq_len(2), each = nrow(S4Vectors::metadata(sce)$SOM_codes) / 2)
-    )
-    for (m in markers) {
-        somRasterData[[m]] <- seq_len(nrow(S4Vectors::metadata(sce)$SOM_codes)) / nrow(S4Vectors::metadata(sce)$SOM_codes)
-    }
-    expect_error(
-        CySA:::.validateClusterSelectorInputs(
-            sce, sce_subsampled = sce,
-            outputList = list(),
-            dList = list(markers[1:2]),
-            dend = stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
-            dendTable = data.frame(id = 1, label = "node1"),
-            clusterPatientTable = table(sample_id = sce$sample_id, cluster_id = sce$cluster_id),
-            somRasterData = somRasterData,
-            somCodesName = "SOM_codes",
-            nPlots =  1L, fsom = bad_fsom
-        ),
-        "MST"
-    )
+  skip_if_not_installed("FlowSOM")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  # Create a FlowSOM object with missing MST$l layout
+  bad_fsom <- list(MST = list()) # Missing 'l' component
+  class(bad_fsom) <- "FlowSOM"
+  # Create proper somRasterData with all marker columns
+  markers <- S4Vectors::metadata(sce)$map$colsUsed
+  somRasterData <- data.frame(
+    x = rep(seq_len(5), length.out = nrow(S4Vectors::metadata(sce)$SOM_codes)),
+    y = rep(seq_len(2), each = nrow(S4Vectors::metadata(sce)$SOM_codes) / 2)
+  )
+  for (m in markers) {
+    somRasterData[[m]] <- seq_len(nrow(S4Vectors::metadata(sce)$SOM_codes)) / nrow(S4Vectors::metadata(sce)$SOM_codes)
+  }
+  expect_error(
+    CySA:::.validateClusterSelectorInputs(
+      sce,
+      sce_subsampled = sce,
+      outputList = list(),
+      dList = list(markers[1:2]),
+      dend = stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
+      dendTable = data.frame(id = 1, label = "node1"),
+      clusterPatientTable = table(sample_id = sce$sample_id, cluster_id = sce$cluster_id),
+      somRasterData = somRasterData,
+      somCodesName = "SOM_codes",
+      nPlots = 1L, fsom = bad_fsom
+    ),
+    "MST"
+  )
 })
 
 test_that(".validateClusterSelectorInputs checks somRasterData columns", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    bad_raster <- data.frame(x = 1, y = 1)
-    expect_error(
-        CySA:::.validateClusterSelectorInputs(
-            sce, sce, list(), list(c("marker1", "marker2")),
-            stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
-            data.frame(id = 1, label = "node1"),
-            table(sample_id = sce$sample_id, cluster_id = sce$cluster_id),
-            bad_raster,
-            "SOM_codes", 1L, fsom = NULL
-        ),
-        "missing SOM columns"
-    )
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  bad_raster <- data.frame(x = 1, y = 1)
+  expect_error(
+    CySA:::.validateClusterSelectorInputs(
+      sce, sce, list(), list(c("marker1", "marker2")),
+      stats::as.dendrogram(stats::hclust(stats::dist(matrix(1:4, nrow = 2)))),
+      data.frame(id = 1, label = "node1"),
+      table(sample_id = sce$sample_id, cluster_id = sce$cluster_id),
+      bad_raster,
+      "SOM_codes", 1L,
+      fsom = NULL
+    ),
+    "missing SOM columns"
+  )
 })

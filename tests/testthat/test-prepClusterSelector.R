@@ -5,24 +5,24 @@
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".defaultDList builds six pairs from colsUsed", {
-    sce <- CySA_example_sce(n_markers = 12)
-    dl <- CySA:::.defaultDList(sce)
-    expect_type(dl, "list")
-    expect_length(dl, 6L)
-    expect_true(all(vapply(dl, length, integer(1)) == 2L))
+  sce <- CySA_example_sce(n_markers = 12)
+  dl <- CySA:::.defaultDList(sce)
+  expect_type(dl, "list")
+  expect_length(dl, 6L)
+  expect_true(all(vapply(dl, length, integer(1)) == 2L))
 })
 
 test_that(".defaultDList falls back to rownames when colsUsed too short", {
-    sce <- CySA_example_sce(n_markers = 12)
-    S4Vectors::metadata(sce)$map$colsUsed <- S4Vectors::metadata(sce)$map$colsUsed[1:10]
-    dl <- CySA:::.defaultDList(sce)
-    expect_equal(length(dl), 6L)
+  sce <- CySA_example_sce(n_markers = 12)
+  S4Vectors::metadata(sce)$map$colsUsed <- S4Vectors::metadata(sce)$map$colsUsed[1:10]
+  dl <- CySA:::.defaultDList(sce)
+  expect_equal(length(dl), 6L)
 })
 
 test_that(".defaultDList errors when fewer than 12 names available", {
-    sce <- CySA_example_sce(n_markers = 6)
-    S4Vectors::metadata(sce)$map$colsUsed <- NULL
-    expect_error(CySA:::.defaultDList(sce), "at least 12")
+  sce <- CySA_example_sce(n_markers = 6)
+  S4Vectors::metadata(sce)$map$colsUsed <- NULL
+  expect_error(CySA:::.defaultDList(sce), "at least 12")
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -30,18 +30,18 @@ test_that(".defaultDList errors when fewer than 12 names available", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that("prepClusterSelectorData uses cache file when present", {
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
-    sce_subsampled <- sce[, 1:50]
-    tmp <- tempfile(fileext = ".RData")
-    save(sce_subsampled = sce_subsampled, file = tmp)
-    cache <- sub("\\.RData$", ".subsampled.RData", tmp)
-    file.copy(tmp, cache, overwrite = TRUE)
+  sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
+  sce_subsampled <- sce[, 1:50]
+  tmp <- tempfile(fileext = ".RData")
+  save(sce_subsampled = sce_subsampled, file = tmp)
+  cache <- sub("\\.RData$", ".subsampled.RData", tmp)
+  file.copy(tmp, cache, overwrite = TRUE)
 
-    prepped <- prepClusterSelectorData(sce, somFile = tmp, total_cells_to_sample = 50)
-    expect_s4_class(prepped$sce_subsampled, "SingleCellExperiment")
-    expect_equal(ncol(prepped$sce_subsampled), 50L)
+  prepped <- prepClusterSelectorData(sce, somFile = tmp, total_cells_to_sample = 50)
+  expect_s4_class(prepped$sce_subsampled, "SingleCellExperiment")
+  expect_equal(ncol(prepped$sce_subsampled), 50L)
 
-    unlink(c(tmp, cache))
+  unlink(c(tmp, cache))
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -49,22 +49,22 @@ test_that("prepClusterSelectorData uses cache file when present", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".buildSOMCodes recomputes missing markers", {
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 6, n_markers = 8)
-    # Drop two markers from SOM_codes so they have to be recomputed.
-    keep <- colnames(S4Vectors::metadata(sce)$SOM_codes)[1:6]
-    S4Vectors::metadata(sce)$SOM_codes <- S4Vectors::metadata(sce)$SOM_codes[, keep, drop = FALSE]
+  sce <- CySA_example_sce(n_cells = 300, n_nodes = 6, n_markers = 8)
+  # Drop two markers from SOM_codes so they have to be recomputed.
+  keep <- colnames(S4Vectors::metadata(sce)$SOM_codes)[1:6]
+  S4Vectors::metadata(sce)$SOM_codes <- S4Vectors::metadata(sce)$SOM_codes[, keep, drop = FALSE]
 
-    sce2 <- CySA:::.buildSOMCodes(sce)
-    expect_true(all(rownames(sce2) %in% colnames(S4Vectors::metadata(sce2)$SOM_codes)))
+  sce2 <- CySA:::.buildSOMCodes(sce)
+  expect_true(all(rownames(sce2) %in% colnames(S4Vectors::metadata(sce2)$SOM_codes)))
 })
 
 test_that(".buildSOMCodes returns early when all markers present", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
-    sce2 <- CySA:::.buildSOMCodes(sce)
-    expect_equal(
-        colnames(S4Vectors::metadata(sce)$SOM_codes),
-        colnames(S4Vectors::metadata(sce2)$SOM_codes)
-    )
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4)
+  sce2 <- CySA:::.buildSOMCodes(sce)
+  expect_equal(
+    colnames(S4Vectors::metadata(sce)$SOM_codes),
+    colnames(S4Vectors::metadata(sce2)$SOM_codes)
+  )
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -72,21 +72,21 @@ test_that(".buildSOMCodes returns early when all markers present", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".buildSOMStats returns a data.frame with required columns", {
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
-    st <- CySA:::.buildSOMStats(sce)
-    expect_s3_class(st, "data.frame")
-    expect_true(all(c("median", "mean", "rdQu", "max", "n", "id") %in% colnames(st)))
-    expect_equal(nrow(st), 6L)
+  sce <- CySA_example_sce(n_cells = 300, n_nodes = 6)
+  st <- CySA:::.buildSOMStats(sce)
+  expect_s3_class(st, "data.frame")
+  expect_true(all(c("median", "mean", "rdQu", "max", "n", "id") %in% colnames(st)))
+  expect_equal(nrow(st), 6L)
 })
 
 test_that(".buildSOMStats handles empty clusters", {
-    sce <- CySA_example_sce(n_cells = 100, n_nodes = 10)
-    # force some clusters to have no cells
-    cd <- SingleCellExperiment::colData(sce)
-    cd$cluster_id <- factor(rep(1:2, length.out = ncol(sce)), levels = seq_len(10))
-    SummarizedExperiment::colData(sce) <- cd
-    st <- CySA:::.buildSOMStats(sce)
-    expect_equal(nrow(st), 10L)
+  sce <- CySA_example_sce(n_cells = 100, n_nodes = 10)
+  # force some clusters to have no cells
+  cd <- SingleCellExperiment::colData(sce)
+  cd$cluster_id <- factor(rep(1:2, length.out = ncol(sce)), levels = seq_len(10))
+  SummarizedExperiment::colData(sce) <- cd
+  st <- CySA:::.buildSOMStats(sce)
+  expect_equal(nrow(st), 10L)
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -94,10 +94,10 @@ test_that(".buildSOMStats handles empty clusters", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".buildSOMClusterStats returns long data frame", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 4, n_markers = 6)
-    df <- CySA:::.buildSOMClusterStats(sce, verbose = FALSE)
-    expect_true(all(c("cluster", "stat", "variable", "value") %in% colnames(df)))
-    expect_equal(length(unique(df$stat)), 6L)
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 4, n_markers = 6)
+  df <- CySA:::.buildSOMClusterStats(sce, verbose = FALSE)
+  expect_true(all(c("cluster", "stat", "variable", "value") %in% colnames(df)))
+  expect_equal(length(unique(df$stat)), 6L)
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -105,15 +105,15 @@ test_that(".buildSOMClusterStats returns long data frame", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".buildSOMRasterData returns square grid data", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 16, n_markers = 6)
-    rd <- CySA:::.buildSOMRasterData(sce)
-    expect_s3_class(rd, "data.frame")
-    expect_true(all(c("x", "y", "N") %in% colnames(rd)))
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 16, n_markers = 6)
+  rd <- CySA:::.buildSOMRasterData(sce)
+  expect_s3_class(rd, "data.frame")
+  expect_true(all(c("x", "y", "N") %in% colnames(rd)))
 })
 
 test_that(".buildSOMRasterData errors for non-square grid", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 10, n_markers = 6)
-    expect_error(CySA:::.buildSOMRasterData(sce), "not square")
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 10, n_markers = 6)
+  expect_error(CySA:::.buildSOMRasterData(sce), "not square")
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -121,11 +121,11 @@ test_that(".buildSOMRasterData errors for non-square grid", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that(".buildDendTable returns list without tree when useColTree = FALSE", {
-    sce <- CySA_example_sce(n_cells = 200, n_nodes = 6)
-    res <- CySA:::.buildDendTable(sce, useColTree = FALSE)
-    expect_type(res, "list")
-    expect_named(res, c("dend", "dendTable", "colTree"))
-    expect_null(res$colTree)
+  sce <- CySA_example_sce(n_cells = 200, n_nodes = 6)
+  res <- CySA:::.buildDendTable(sce, useColTree = FALSE)
+  expect_type(res, "list")
+  expect_named(res, c("dend", "dendTable", "colTree"))
+  expect_null(res$colTree)
 })
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -133,52 +133,52 @@ test_that(".buildDendTable returns list without tree when useColTree = FALSE", {
 # ══════════════════════════════════════════════════════════════════════════════
 
 test_that("prepClusterSelector creates sce.shiny.RData", {
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 16, n_markers = 12)
-    root <- tempfile("cysa")
-    dir.create(file.path(root, "_data"), recursive = TRUE)
-    saveRDS(sce, file.path(root, "_data", "sce.RDS"))
+  sce <- CySA_example_sce(n_cells = 300, n_nodes = 16, n_markers = 12)
+  root <- tempfile("cysa")
+  dir.create(file.path(root, "_data"), recursive = TRUE)
+  saveRDS(sce, file.path(root, "_data", "sce.RDS"))
 
-    res <- prepClusterSelector(root, total_cells_to_sample = 100, force = TRUE, verbose = FALSE)
-    expect_equal(res, root)
-    expect_true(file.exists(file.path(root, "_data", "sce.shiny.RData")))
+  res <- prepClusterSelector(root, total_cells_to_sample = 100, force = TRUE, verbose = FALSE)
+  expect_equal(res, root)
+  expect_true(file.exists(file.path(root, "_data", "sce.shiny.RData")))
 
-    unlink(root, recursive = TRUE)
+  unlink(root, recursive = TRUE)
 })
 
 test_that("prepClusterSelector reuses existing output unless force = TRUE", {
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 16)
-    root <- tempfile("cysa")
-    dir.create(file.path(root, "_data"), recursive = TRUE)
-    saveRDS(sce, file.path(root, "_data", "sce.RDS"))
+  sce <- CySA_example_sce(n_cells = 300, n_nodes = 16)
+  root <- tempfile("cysa")
+  dir.create(file.path(root, "_data"), recursive = TRUE)
+  saveRDS(sce, file.path(root, "_data", "sce.RDS"))
 
-    prepClusterSelector(root, total_cells_to_sample = 100, force = TRUE, verbose = FALSE)
-    mtime1 <- file.info(file.path(root, "_data", "sce.shiny.RData"))$mtime
+  prepClusterSelector(root, total_cells_to_sample = 100, force = TRUE, verbose = FALSE)
+  mtime1 <- file.info(file.path(root, "_data", "sce.shiny.RData"))$mtime
 
-    Sys.sleep(1.1)
-    prepClusterSelector(root, force = FALSE, verbose = FALSE)
-    mtime2 <- file.info(file.path(root, "_data", "sce.shiny.RData"))$mtime
+  Sys.sleep(1.1)
+  prepClusterSelector(root, force = FALSE, verbose = FALSE)
+  mtime2 <- file.info(file.path(root, "_data", "sce.shiny.RData"))$mtime
 
-    expect_equal(mtime1, mtime2)
-    unlink(root, recursive = TRUE)
+  expect_equal(mtime1, mtime2)
+  unlink(root, recursive = TRUE)
 })
 
 test_that("prepClusterSelector errors when sce.RDS missing", {
-    root <- tempfile("cysa")
-    dir.create(file.path(root, "_data"), recursive = TRUE)
-    expect_error(prepClusterSelector(root), "SCE file not found")
-    unlink(root, recursive = TRUE)
+  root <- tempfile("cysa")
+  dir.create(file.path(root, "_data"), recursive = TRUE)
+  expect_error(prepClusterSelector(root), "SCE file not found")
+  unlink(root, recursive = TRUE)
 })
 
 test_that("prepClusterSelector uses provided subsampled SCE file", {
-    sce <- CySA_example_sce(n_cells = 300, n_nodes = 16, n_markers = 12)
-    root <- tempfile("cysa")
-    dir.create(file.path(root, "_data"), recursive = TRUE)
-    saveRDS(sce, file.path(root, "_data", "sce.RDS"))
+  sce <- CySA_example_sce(n_cells = 300, n_nodes = 16, n_markers = 12)
+  root <- tempfile("cysa")
+  dir.create(file.path(root, "_data"), recursive = TRUE)
+  saveRDS(sce, file.path(root, "_data", "sce.RDS"))
 
-    sub_file <- file.path(root, "sce.subsampled.RDS")
-    saveRDS(sce[, 1:100], sub_file)
+  sub_file <- file.path(root, "sce.subsampled.RDS")
+  saveRDS(sce[, 1:100], sub_file)
 
-    prepClusterSelector(root, subsampledSCEFile = sub_file, force = TRUE, verbose = FALSE)
-    expect_true(file.exists(file.path(root, "_data", "sce.shiny.RData")))
-    unlink(root, recursive = TRUE)
+  prepClusterSelector(root, subsampledSCEFile = sub_file, force = TRUE, verbose = FALSE)
+  expect_true(file.exists(file.path(root, "_data", "sce.shiny.RData")))
+  unlink(root, recursive = TRUE)
 })

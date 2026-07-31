@@ -18,10 +18,10 @@ vignette: >
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
-    collapse  = TRUE,
-    comment   = "#>",
-    message   = FALSE,
-    warning   = FALSE
+  collapse  = TRUE,
+  comment   = "#>",
+  message   = FALSE,
+  warning   = FALSE
 )
 ```
 
@@ -48,8 +48,9 @@ and scatter visualizations.
 Install the package from Bioconductor with:
 
 ```{r install, eval = FALSE}
-if (!requireNamespace("BiocManager", quietly = TRUE))
-    install.packages("BiocManager")
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
 BiocManager::install("CySA")
 ```
 
@@ -80,9 +81,9 @@ list of marker pairs:
 
 ```{r prep-data}
 prepped <- prepClusterSelectorData(
-    sce,
-    total_cells_to_sample = 200,
-    somCodesName = "SOM_codes"
+  sce,
+  total_cells_to_sample = 200,
+  somCodesName = "SOM_codes"
 )
 names(prepped)
 ```
@@ -97,28 +98,28 @@ markers <- S4Vectors::metadata(sce)$map$colsUsed
 dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes)))
 
 dendTable <- data.frame(
-    id = seq_len(nrow(som_codes)),
-    label = rownames(som_codes),
-    stringsAsFactors = FALSE
+  id = seq_len(nrow(som_codes)),
+  label = rownames(som_codes),
+  stringsAsFactors = FALSE
 )
 
 clusterPatientTable <- table(
-    sample_id = sce$sample_id,
-    cluster_id = sce$cluster_id
+  sample_id = sce$sample_id,
+  cluster_id = sce$cluster_id
 )
 
 somRasterData <- data.frame(
-    x = rep(seq_len(5), length.out = nrow(som_codes)),
-    y = rep(seq_len(2), each = ceiling(nrow(som_codes) / 2)),
-    id = seq_len(nrow(som_codes))
+  x = rep(seq_len(5), length.out = nrow(som_codes)),
+  y = rep(seq_len(2), each = ceiling(nrow(som_codes) / 2)),
+  id = seq_len(nrow(som_codes))
 )
 for (m in markers) {
-    somRasterData[[m]] <- seq_len(nrow(som_codes)) / nrow(som_codes)
+  somRasterData[[m]] <- seq_len(nrow(som_codes)) / nrow(som_codes)
 }
 
 arr <- array(
-    data = seq_len(10 * 10 * length(markers)),
-    dim = c(10, 10, length(markers))
+  data = seq_len(10 * 10 * length(markers)),
+  dim = c(10, 10, length(markers))
 )
 somRasterObj <- raster::brick(arr)
 names(somRasterObj) <- markers
@@ -128,14 +129,14 @@ Create the reusable Shiny app object:
 
 ```{r cluster-selector}
 app <- clusterSelector(
-    sce = prepped$sce,
-    sce_subsampled = prepped$sce_subsampled,
-    dList = prepped$dList,
-    dend = dend,
-    dendTable = dendTable,
-    clusterPatientTable = clusterPatientTable,
-    somRasterData = somRasterData,
-    somRasterObj = somRasterObj
+  sce = prepped$sce,
+  sce_subsampled = prepped$sce_subsampled,
+  dList = prepped$dList,
+  dend = dend,
+  dendTable = dendTable,
+  clusterPatientTable = clusterPatientTable,
+  somRasterData = somRasterData,
+  somRasterObj = somRasterObj
 )
 ```
 
@@ -152,8 +153,8 @@ scatter plot or an interactive dendrogram:
 
 ```{r fig-gating, echo = FALSE, out.width = "49%", fig.show = "hold"}
 knitr::include_graphics(c(
-    "../man/figures/README-2d-plot.png",
-    "../man/figures/README-dendrogram.png"
+  "../man/figures/README-2d-plot.png",
+  "../man/figures/README-dendrogram.png"
 ))
 ```
 
@@ -163,8 +164,8 @@ consistently across all views:
 
 ```{r fig-dimred, echo = FALSE, out.width = "49%", fig.show = "hold"}
 knitr::include_graphics(c(
-    "../man/figures/README-som-2d-plots.png",
-    "../man/figures/README-dimreduction.png"
+  "../man/figures/README-som-2d-plots.png",
+  "../man/figures/README-dimreduction.png"
 ))
 ```
 
@@ -206,25 +207,25 @@ library(S4Vectors)
 set.seed(42)
 
 # ── dimensions ────────────────────────────────────────────────────────────────
-n_markers   <- 12
+n_markers <- 12
 n_som_nodes <- 50
-n_samples   <- 6      # 3 control + 3 treated
-n_cells     <- 300    # per sample
+n_samples <- 6 # 3 control + 3 treated
+n_cells <- 300 # per sample
 
 marker_names <- paste0("marker", seq_len(n_markers))
-sample_ids   <- paste0("S", seq_len(n_samples))
-conditions   <- factor(
-    c(rep("control", 3), rep("treated", 3)),
-    levels = c("control", "treated")
+sample_ids <- paste0("S", seq_len(n_samples))
+conditions <- factor(
+  c(rep("control", 3), rep("treated", 3)),
+  levels = c("control", "treated")
 )
 
 # ── experiment_info ───────────────────────────────────────────────────────────
 # total_cells: cells acquired by the cytometer (used as relativeTo denominator)
 experiment_info <- data.frame(
-    sample_id   = sample_ids,
-    condition   = conditions,
-    total_cells = c(8000L, 9200L, 7800L, 10500L, 11000L, 9800L),
-    stringsAsFactors = FALSE
+  sample_id = sample_ids,
+  condition = conditions,
+  total_cells = c(8000L, 9200L, 7800L, 10500L, 11000L, 9800L),
+  stringsAsFactors = FALSE
 )
 
 # ── SOM codes ─────────────────────────────────────────────────────────────────
@@ -232,46 +233,50 @@ experiment_info <- data.frame(
 # Nodes 21-30 : intermediate
 # Nodes 31-50 : high expression → "activated" phenotype
 som_codes <- matrix(0,
-    nrow     = n_som_nodes,
-    ncol     = n_markers,
-    dimnames = list(
-        paste0("node", seq_len(n_som_nodes)),
-        marker_names
-    )
+  nrow = n_som_nodes,
+  ncol = n_markers,
+  dimnames = list(
+    paste0("node", seq_len(n_som_nodes)),
+    marker_names
+  )
 )
 for (node in seq_len(n_som_nodes)) {
-    base <- node / n_som_nodes               # 0.02 … 1.00
-    som_codes[node, ] <- pmax(0, base + rnorm(n_markers, sd = 0.02))
+  base <- node / n_som_nodes # 0.02 … 1.00
+  som_codes[node, ] <- pmax(0, base + rnorm(n_markers, sd = 0.02))
 }
 
 # ── cell assignment ───────────────────────────────────────────────────────────
 # Control: 70 % in nodes  1-20  (resting)
 # Treated: 70 % in nodes 31-50  (activated)
 assign_clusters <- function(condition, n) {
-    if (condition == "control") {
-        c(sample(1:20,  round(n * 0.70), replace = TRUE),
-          sample(seq_len(n_som_nodes), n - round(n * 0.70), replace = TRUE))
-    } else {
-        c(sample(31:50, round(n * 0.70), replace = TRUE),
-          sample(seq_len(n_som_nodes), n - round(n * 0.70), replace = TRUE))
-    }
+  if (condition == "control") {
+    c(
+      sample(1:20, round(n * 0.70), replace = TRUE),
+      sample(seq_len(n_som_nodes), n - round(n * 0.70), replace = TRUE)
+    )
+  } else {
+    c(
+      sample(31:50, round(n * 0.70), replace = TRUE),
+      sample(seq_len(n_som_nodes), n - round(n * 0.70), replace = TRUE)
+    )
+  }
 }
 
 coldata_list <- mapply(function(sid, cond) {
-    data.frame(
-        sample_id  = sid,
-        cluster_id = assign_clusters(as.character(cond), n_cells),
-        stringsAsFactors = FALSE
-    )
+  data.frame(
+    sample_id = sid,
+    cluster_id = assign_clusters(as.character(cond), n_cells),
+    stringsAsFactors = FALSE
+  )
 }, sample_ids, as.character(conditions), SIMPLIFY = FALSE)
 
 coldata_df <- do.call(rbind, coldata_list)
-n_total    <- nrow(coldata_df)   # 1800
+n_total <- nrow(coldata_df) # 1800
 
 # ── assay matrix — each cell ≈ its node's SOM code + noise ───────────────────
 exprs_mat <- vapply(seq_len(n_total), function(i) {
-    node <- coldata_df$cluster_id[i]
-    pmax(0, som_codes[node, ] + rnorm(n_markers, sd = 0.05))
+  node <- coldata_df$cluster_id[i]
+  pmax(0, som_codes[node, ] + rnorm(n_markers, sd = 0.05))
 }, numeric(n_markers))
 dimnames(exprs_mat) <- list(marker_names, paste0("cell", seq_len(n_total)))
 
@@ -279,78 +284,78 @@ dimnames(exprs_mat) <- list(marker_names, paste0("cell", seq_len(n_total)))
 node_counts <- tabulate(coldata_df$cluster_id, nbins = n_som_nodes)
 
 # summarise marker1 expression per node for hover-text columns
-m1          <- exprs_mat["marker1", ]
+m1 <- exprs_mat["marker1", ]
 node_factor <- factor(coldata_df$cluster_id, levels = seq_len(n_som_nodes))
 
 som_stats <- data.frame(
-    id     = seq_len(n_som_nodes),
-    n      = node_counts,
-    mean   = as.numeric(tapply(m1, node_factor, mean)),
-    median = as.numeric(tapply(m1, node_factor, median)),
-    rdQu   = as.numeric(tapply(m1, node_factor, quantile, probs = 0.75)),
-    max    = as.numeric(tapply(m1, node_factor, max)),
-    stringsAsFactors = FALSE
+  id = seq_len(n_som_nodes),
+  n = node_counts,
+  mean = as.numeric(tapply(m1, node_factor, mean)),
+  median = as.numeric(tapply(m1, node_factor, median)),
+  rdQu = as.numeric(tapply(m1, node_factor, quantile, probs = 0.75)),
+  max = as.numeric(tapply(m1, node_factor, max)),
+  stringsAsFactors = FALSE
 )
 # nodes with zero cells get NA from tapply; replace with 0
 som_stats[is.na(som_stats)] <- 0
 
 # ── assemble SCE ──────────────────────────────────────────────────────────────
 sce_stats <- SingleCellExperiment(
-    assays  = list(exprs = exprs_mat),
-    colData = DataFrame(
-        sample_id  = coldata_df$sample_id,
-        cluster_id = factor(coldata_df$cluster_id, levels = seq_len(n_som_nodes))
-    ),
-    metadata = list(
-        SOM_codes       = som_codes,
-        SOM_stats       = som_stats,
-        map             = list(colsUsed = marker_names),
-        experiment_info = experiment_info
-    )
+  assays = list(exprs = exprs_mat),
+  colData = DataFrame(
+    sample_id  = coldata_df$sample_id,
+    cluster_id = factor(coldata_df$cluster_id, levels = seq_len(n_som_nodes))
+  ),
+  metadata = list(
+    SOM_codes       = som_codes,
+    SOM_stats       = som_stats,
+    map             = list(colsUsed = marker_names),
+    experiment_info = experiment_info
+  )
 )
 rownames(sce_stats) <- marker_names
 
 # ── clusterPatientTable ───────────────────────────────────────────────────────
 clusterPatientTable <- table(
-    sample_id  = sce_stats$sample_id,
-    cluster_id = sce_stats$cluster_id
+  sample_id  = sce_stats$sample_id,
+  cluster_id = sce_stats$cluster_id
 )
 
 # ── app inputs ────────────────────────────────────────────────────────────────
 prepped <- prepClusterSelectorData(
-    sce_stats,
-    total_cells_to_sample = 600,
-    somCodesName = "SOM_codes"
+  sce_stats,
+  total_cells_to_sample = 600,
+  somCodesName = "SOM_codes"
 )
 
 som_codes_mat <- metadata(sce_stats)$SOM_codes
 dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes_mat)))
 
 dendTable <- data.frame(
-    id    = seq_len(n_som_nodes),
-    label = rownames(som_codes_mat),
-    stringsAsFactors = FALSE
+  id = seq_len(n_som_nodes),
+  label = rownames(som_codes_mat),
+  stringsAsFactors = FALSE
 )
 
 # SOM raster grid: 10 × 5 layout for 50 nodes
 somRasterData <- data.frame(
-    x  = rep(seq_len(10), times = 5),
-    y  = rep(seq_len(5),  each  = 10),
-    id = seq_len(n_som_nodes)
+  x  = rep(seq_len(10), times = 5),
+  y  = rep(seq_len(5), each = 10),
+  id = seq_len(n_som_nodes)
 )
 for (m in marker_names) {
-    somRasterData[[m]] <- som_codes_mat[, m]
+  somRasterData[[m]] <- som_codes_mat[, m]
 }
 
 app <- clusterSelector(
-    sce                  = prepped$sce,
-    sce_subsampled       = prepped$sce_subsampled,
-    dList                = prepped$dList,
-    dend                 = dend,
-    dendTable            = dendTable,
-    clusterPatientTable  = clusterPatientTable,
-    somRasterData        = somRasterData,
-    somRasterObj         = NULL
+  sce                  = prepped$sce,
+  sce_subsampled       = prepped$sce_subsampled,
+  dList                = prepped$dList,
+  dend                 = dend,
+  dendTable            = dendTable,
+  clusterPatientTable  = clusterPatientTable,
+  somRasterData        = somRasterData,
+  somRasterObj         = NULL
 )
 ```
 
@@ -370,9 +375,9 @@ per-node marker pie charts, all marker-pair views, and SOM heatmaps:
 
 ```{r fig-phenotype, echo = FALSE, out.width = "100%"}
 knitr::include_graphics(c(
-    "../man/figures/README-marker-pies.png",
-    "../man/figures/README-som-pairs-grid.png",
-    "../man/figures/README-som-heatmaps.png"
+  "../man/figures/README-marker-pies.png",
+  "../man/figures/README-som-pairs-grid.png",
+  "../man/figures/README-som-heatmaps.png"
 ))
 ```
 

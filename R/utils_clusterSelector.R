@@ -32,92 +32,92 @@
                                      fsom = NULL,
                                      env = environment(),
                                      verbose = FALSE) {
-    # nocov start
-    # for (idx in seq_along(dList)) {
-    #     assign(paste0("d", idx, ".1"), dList[[idx]][1])
-    #     assign(paste0("d", idx, ".2"), dList[[idx]][2])
-    # }
+  # nocov start
+  # for (idx in seq_along(dList)) {
+  #     assign(paste0("d", idx, ".1"), dList[[idx]][1])
+  #     assign(paste0("d", idx, ".2"), dList[[idx]][2])
+  # }
 
-    metaD <- .validateClusterSelectorInputs(
-        sce, sce_subsampled, outputList, dList, dend, dendTable,
-        clusterPatientTable, somRasterData, somCodesName, nPlots, fsom
-    )
+  metaD <- .validateClusterSelectorInputs(
+    sce, sce_subsampled, outputList, dList, dend, dendTable,
+    clusterPatientTable, somRasterData, somCodesName, nPlots, fsom
+  )
 
-    rnSCE <- rownames(sce)
+  rnSCE <- rownames(sce)
 
-    jscode <- "shinyjs.closeWindow = function() { window.close(); }"
+  jscode <- "shinyjs.closeWindow = function() { window.close(); }"
 
-    if ("outputList" %in% ls(envir = env)) {
-        outputList <- get("outputList", envir = env)
+  if ("outputList" %in% ls(envir = env)) {
+    outputList <- get("outputList", envir = env)
+  }
+  cluster_levels <- if (is.factor(sce$cluster_id)) levels(sce$cluster_id) else sort(unique(as.integer(sce$cluster_id)))
+  outputList <- .initializeOutputList(outputList, cluster_levels)
+  colsUsed <- metaD$map$colsUsed
+  if (!"id" %in% colnames(somRasterData)) {
+    somRasterData$id <- seq_len(nrow(somRasterData))
+  }
+  keepCols <- intersect(c("x", "y", "id", colsUsed), colnames(somRasterData))
+  somRasterData <- somRasterData[, keepCols]
+  if (!is.null(somRasterObj)) {
+    if (inherits(somRasterObj, c("RasterBrick", "RasterStack"))) {
+      somRasterObj <- raster::subset(somRasterObj, colsUsed)
+    } else if (is.array(somRasterObj)) {
+      # Subset array layers by name
+      layer_idx <- which(dimnames(somRasterObj)[[3]] %in% colsUsed)
+      somRasterObj <- somRasterObj[, , layer_idx, drop = FALSE]
     }
-    cluster_levels <- if (is.factor(sce$cluster_id)) levels(sce$cluster_id) else sort(unique(as.integer(sce$cluster_id)))
-    outputList <- .initializeOutputList(outputList, cluster_levels)
-    colsUsed <- metaD$map$colsUsed
-    if (!"id" %in% colnames(somRasterData)) {
-        somRasterData$id <- seq_len(nrow(somRasterData))
-    }
-    keepCols <- intersect(c("x", "y", "id", colsUsed), colnames(somRasterData))
-    somRasterData <- somRasterData[, keepCols]
-    if (!is.null(somRasterObj)) {
-        if (inherits(somRasterObj, c("RasterBrick", "RasterStack"))) {
-            somRasterObj <- raster::subset(somRasterObj, colsUsed)
-        } else if (is.array(somRasterObj)) {
-            # Subset array layers by name
-            layer_idx <- which(dimnames(somRasterObj)[[3]] %in% colsUsed)
-            somRasterObj <- somRasterObj[, , layer_idx, drop = FALSE]
-        }
-    }
+  }
 
-    # Pre-build the SOM raster heatmap as a ggplot object once.
-    # The overlay (selected nodes) is added per-render as ggplot layers.
-    # Using ggplot avoids the lattice/base-graphics incompatibility that
-    # broke the previous recordPlot/replayPlot approach.
-    baseRasterGgplot <- .buildBaseRasterGgplot(somRasterData, colsUsed)
+  # Pre-build the SOM raster heatmap as a ggplot object once.
+  # The overlay (selected nodes) is added per-render as ggplot layers.
+  # Using ggplot avoids the lattice/base-graphics incompatibility that
+  # broke the previous recordPlot/replayPlot approach.
+  baseRasterGgplot <- .buildBaseRasterGgplot(somRasterData, colsUsed)
 
-    # Pre-compute per-channel axis limits once from the full assay matrix.
-    # This avoids scanning assays(sce)[[1]] every time dimSelection changes.
-    assay_mat <- SummarizedExperiment::assays(sce)[[1]]
-    channelLimits <- lapply(rownames(sce), function(ch) {
-        vals <- assay_mat[ch, ]
-        c(min = min(vals), max = max(vals))
-    })
-    names(channelLimits) <- rownames(sce)
+  # Pre-compute per-channel axis limits once from the full assay matrix.
+  # This avoids scanning assays(sce)[[1]] every time dimSelection changes.
+  assay_mat <- SummarizedExperiment::assays(sce)[[1]]
+  channelLimits <- lapply(rownames(sce), function(ch) {
+    vals <- assay_mat[ch, ]
+    c(min = min(vals), max = max(vals))
+  })
+  names(channelLimits) <- rownames(sce)
 
-    assign(x = "outputList", value = outputList, envir = env)
+  assign(x = "outputList", value = outputList, envir = env)
 
 
-    # nPlots = 15
-    # nPlots = 6
+  # nPlots = 15
+  # nPlots = 6
 
 
-    ui <- shinydashboard::dashboardPage(
-        shinydashboard::dashboardHeader(title = "Cluster Selector"),
-        sidebar = .buildClusterSelectorSidebar(sce, outputList, nPlots),
-        body = shinydashboard::dashboardBody(
-            .buildFirstBodyRow(colTree, nPlots),
-            .buildSOM2DPlotsBox(nPlots, colsUsed, outputList,
-                                markers = rnSCE, dList = dList),
-            .buildSixStaticSOMBox(markers = rnSCE, dList = dList),
-            .buildFlowSOMPieBox(),
-            .buildFlowSOMStarsBox(fsom),
-            .buildStatsBox(metaD, somCodesName, outputList),
-            .buildSOMRasterBox(),
-            .buildViolinBox(metaD[[somCodesName]], colsUsed),
-            .buildUpSetBox(outputList)
-        )
+  ui <- shinydashboard::dashboardPage(
+    shinydashboard::dashboardHeader(title = "Cluster Selector"),
+    sidebar = .buildClusterSelectorSidebar(sce, outputList, nPlots),
+    body = shinydashboard::dashboardBody(
+      .buildFirstBodyRow(colTree, nPlots),
+      .buildSOM2DPlotsBox(nPlots, colsUsed, outputList,
+        markers = rnSCE, dList = dList
+      ),
+      .buildSixStaticSOMBox(markers = rnSCE, dList = dList),
+      .buildFlowSOMPieBox(),
+      .buildFlowSOMStarsBox(fsom),
+      .buildStatsBox(metaD, somCodesName, outputList),
+      .buildSOMRasterBox(),
+      .buildViolinBox(metaD[[somCodesName]], colsUsed),
+      .buildUpSetBox(outputList)
     )
+  )
 
-    server <- .buildClusterSelectorServer(
-        sce = sce, sce_subsampled = sce_subsampled,
-        outputList = outputList, colTree = colTree, dList = dList,
-        dend = dend, dendTable = dendTable,
-        clusterPatientTable = clusterPatientTable,
-        somCodesName = somCodesName, nPlots = nPlots,
-        somRasterData = somRasterData, somRasterObj = somRasterObj,
-        fsom = fsom, env = env, verbose = verbose
-    )
+  server <- .buildClusterSelectorServer(
+    sce = sce, sce_subsampled = sce_subsampled,
+    outputList = outputList, colTree = colTree, dList = dList,
+    dend = dend, dendTable = dendTable,
+    clusterPatientTable = clusterPatientTable,
+    somCodesName = somCodesName, nPlots = nPlots,
+    somRasterData = somRasterData, somRasterObj = somRasterObj,
+    fsom = fsom, env = env, verbose = verbose
+  )
 
-    list(ui = ui, server = server)
-    # nocov end
+  list(ui = ui, server = server)
+  # nocov end
 }
-

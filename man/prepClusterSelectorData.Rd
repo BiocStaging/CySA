@@ -44,4 +44,7 @@ sce <- CySA_example_sce(n_cells = 200, n_nodes = 10)
 prepped <- prepClusterSelectorData(sce, total_cells_to_sample = 100)
 names(prepped)
 
+sce <- CySA_example_sce()
+# prepClusterSelector(sce, ...)
+
 }

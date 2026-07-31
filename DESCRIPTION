@@ -1,6 +1,6 @@
 Package: CySA
 Title: Interactive Cluster Selector for Cytometry Data
-Version: 0.99.25
+Version: 0.99.26
 Authors@R:
     person("Bernd", "Jagla", , "bernd.jagla@pasteur.fr", role = c("aut", "cre"),
            comment = c(ORCID = "0000-0002-7696-0484"))
@@ -59,6 +59,7 @@ Imports:
 Suggests:
     KernSmooth,
     knitr,
+    jsonlite,
     rmarkdown,
     shinytest2,
     testthat (>= 3.0.0)

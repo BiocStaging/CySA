@@ -4,23 +4,23 @@
 # assistant. All code is redistributed under the package LICENSE.
 
 utils::globalVariables(c(
-    ".", ".data", "..ncount..", "counts", "groups", "id", "marker", "expr",
-    "grpName", "Percent", "n", "value", "variable", "cluster", "colGrp",
-    "x", "y", "xend", "yend", "customdata", "label", "tsne1", "tsne2", "umap1", "umap2",
-    "pc1", "pc2", "rowElement", "cellCounts", "cellPercentages",
-    "dend", "dendTable", "clusterPatientTable", "somRasterData",
-    "somRasterObj", "sce_subsampled", "metaD", "sceRN", "sceCN",
-    "chx", "nNsub", "sce_subsampledRN", "df", "dfPlot",
-    "outputList", "dimSelection", "activePlot", "rsUsed",
-    "inputClusterNumber", "violinPlotSelection", "groupsInput",
-    "countBarPlot", "PercentBarPlot", "dendPlot", "tsnePlot",
-    "umapPlot", "pcaPlot", "scatterPlot", "somRasterPlot", "flowSOMPiePlot",
-    "vlnPlot", "VlnPlot2", "upSetPlot", "selectedUpdate", "selectedUpdate2",
-    "sample2PlotDb", "choicesRV",
-    "sample_id", "group", "val", "somNode", "N", "thrdQu",
-    "scatterPercentile", "somColorVar", "somSizeVar",
-    ".dens_col",
-    "rsUsed_d"
+  ".", ".data", "..ncount..", "counts", "groups", "id", "marker", "expr",
+  "grpName", "Percent", "n", "value", "variable", "cluster", "colGrp",
+  "x", "y", "xend", "yend", "customdata", "label", "tsne1", "tsne2", "umap1", "umap2",
+  "pc1", "pc2", "rowElement", "cellCounts", "cellPercentages",
+  "dend", "dendTable", "clusterPatientTable", "somRasterData",
+  "somRasterObj", "sce_subsampled", "metaD", "sceRN", "sceCN",
+  "chx", "nNsub", "sce_subsampledRN", "df", "dfPlot",
+  "outputList", "dimSelection", "activePlot", "rsUsed",
+  "inputClusterNumber", "violinPlotSelection", "groupsInput",
+  "countBarPlot", "PercentBarPlot", "dendPlot", "tsnePlot",
+  "umapPlot", "pcaPlot", "scatterPlot", "somRasterPlot", "flowSOMPiePlot",
+  "vlnPlot", "VlnPlot2", "upSetPlot", "selectedUpdate", "selectedUpdate2",
+  "sample2PlotDb", "choicesRV",
+  "sample_id", "group", "val", "somNode", "N", "thrdQu",
+  "scatterPercentile", "somColorVar", "somSizeVar",
+  ".dens_col",
+  "rsUsed_d"
 ))
 
 #' Cluster Selector Shiny Application
@@ -111,14 +111,13 @@ clusterSelector <- function(sce,
                             fsom = NULL,
                             env = environment(),
                             verbose = FALSE) {
-    csa <- .buildClusterSelectorApp(
-        sce = sce, sce_subsampled = sce_subsampled, outputList = outputList,
-        colTree = colTree, dList = dList, dend = dend,
-        dendTable = dendTable, clusterPatientTable = clusterPatientTable,
-        somCodesName = somCodesName, nPlots = nPlots,
-        somRasterData = somRasterData, somRasterObj = somRasterObj,
-        fsom = fsom, env = env, verbose = verbose
-    )
-    shiny::shinyApp(ui = csa$ui, server = csa$server)
+  csa <- .buildClusterSelectorApp(
+    sce = sce, sce_subsampled = sce_subsampled, outputList = outputList,
+    colTree = colTree, dList = dList, dend = dend,
+    dendTable = dendTable, clusterPatientTable = clusterPatientTable,
+    somCodesName = somCodesName, nPlots = nPlots,
+    somRasterData = somRasterData, somRasterObj = somRasterObj,
+    fsom = fsom, env = env, verbose = verbose
+  )
+  shiny::shinyApp(ui = csa$ui, server = csa$server)
 }
-

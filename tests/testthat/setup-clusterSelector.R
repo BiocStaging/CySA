@@ -8,70 +8,70 @@ library(shiny)
 
 # Build a small, deterministic app object that tests can share.
 make_test_app <- function(n_cells = 200, n_nodes = 10, fsom = NULL) {
-    set.seed(12)
-    sce <- CySA_example_sce(n_cells = n_cells, n_nodes = n_nodes)
+  set.seed(12)
+  sce <- CySA_example_sce(n_cells = n_cells, n_nodes = n_nodes)
 
-    # Add a factor grouping column so the groupsVar/group1/group2 observers
-    # (observers_clusterSelector.R:162-199) have something real to filter on.
-    # experiment_info's built-in columns (sample_id, some_numeric) are
-    # character/integer, never factors, so levels() on them is always NULL
-    # and those observers' guard would otherwise never pass.
-    S4Vectors::metadata(sce)$experiment_info$treatment <- factor(
-        rep(c("control", "treated"), length.out = nrow(S4Vectors::metadata(sce)$experiment_info)),
-        levels = c("control", "treated")
-    )
+  # Add a factor grouping column so the groupsVar/group1/group2 observers
+  # (observers_clusterSelector.R:162-199) have something real to filter on.
+  # experiment_info's built-in columns (sample_id, some_numeric) are
+  # character/integer, never factors, so levels() on them is always NULL
+  # and those observers' guard would otherwise never pass.
+  S4Vectors::metadata(sce)$experiment_info$treatment <- factor(
+    rep(c("control", "treated"), length.out = nrow(S4Vectors::metadata(sce)$experiment_info)),
+    levels = c("control", "treated")
+  )
 
-    prepped <- prepClusterSelectorData(sce, total_cells_to_sample = 100)
-    som_codes <- S4Vectors::metadata(sce)$SOM_codes
-    markers <- S4Vectors::metadata(sce)$map$colsUsed
-    dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes)))
-    dendTable <- data.frame(
-        id = seq_len(nrow(som_codes)),
-        label = rownames(som_codes),
-        stringsAsFactors = FALSE
-    )
-    clusterPatientTable <- table(
-        sample_id = sce$sample_id,
-        cluster_id = sce$cluster_id
-    )
-    somRasterData <- data.frame(
-        x = rep(seq_len(5), length.out = nrow(som_codes)),
-        y = rep(seq_len(2), each = nrow(som_codes) / 2),
-        id = seq_len(nrow(som_codes))
-    )
-    for (m in markers) {
-        somRasterData[[m]] <- seq_len(nrow(som_codes)) / nrow(som_codes)
-    }
-    arr <- array(
-        data = seq_len(10 * 10 * length(markers)),
-        dim = c(10, 10, length(markers))
-    )
-    somRasterObj <- raster::brick(arr)
-    names(somRasterObj) <- markers
-    env <- new.env()
-    app <- clusterSelector(
-        sce = prepped$sce,
-        sce_subsampled = prepped$sce_subsampled,
-        dList = prepped$dList,
-        dend = dend,
-        dendTable = dendTable,
-        clusterPatientTable = clusterPatientTable,
-        somRasterData = somRasterData,
-        somRasterObj = somRasterObj,
-        fsom = fsom,
-        env = env
-    )
-    list(
-        app = app,
-        env = env,
-        sce = prepped$sce,
-        sce_subsampled = prepped$sce_subsampled
-    )
+  prepped <- prepClusterSelectorData(sce, total_cells_to_sample = 100)
+  som_codes <- S4Vectors::metadata(sce)$SOM_codes
+  markers <- S4Vectors::metadata(sce)$map$colsUsed
+  dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes)))
+  dendTable <- data.frame(
+    id = seq_len(nrow(som_codes)),
+    label = rownames(som_codes),
+    stringsAsFactors = FALSE
+  )
+  clusterPatientTable <- table(
+    sample_id = sce$sample_id,
+    cluster_id = sce$cluster_id
+  )
+  somRasterData <- data.frame(
+    x = rep(seq_len(5), length.out = nrow(som_codes)),
+    y = rep(seq_len(2), each = nrow(som_codes) / 2),
+    id = seq_len(nrow(som_codes))
+  )
+  for (m in markers) {
+    somRasterData[[m]] <- seq_len(nrow(som_codes)) / nrow(som_codes)
+  }
+  arr <- array(
+    data = seq_len(10 * 10 * length(markers)),
+    dim = c(10, 10, length(markers))
+  )
+  somRasterObj <- raster::brick(arr)
+  names(somRasterObj) <- markers
+  env <- new.env()
+  app <- clusterSelector(
+    sce = prepped$sce,
+    sce_subsampled = prepped$sce_subsampled,
+    dList = prepped$dList,
+    dend = dend,
+    dendTable = dendTable,
+    clusterPatientTable = clusterPatientTable,
+    somRasterData = somRasterData,
+    somRasterObj = somRasterObj,
+    fsom = fsom,
+    env = env
+  )
+  list(
+    app = app,
+    env = env,
+    sce = prepped$sce,
+    sce_subsampled = prepped$sce_subsampled
+  )
 }
 
 fsom_stub <- structure(
-    list(MST = list(l = matrix(c(0, 1, 0, 1), ncol = 2))),
-    class = "FlowSOM"
+  list(MST = list(l = matrix(c(0, 1, 0, 1), ncol = 2))),
+  class = "FlowSOM"
 )
 
 #' Suppress the expected "plotly event not registered" warning.
@@ -81,30 +81,30 @@ fsom_stub <- structure(
 #' plotly_selected/plotly_relayout events. This is expected noise in
 #' headless tests and is suppressed here rather than at each call site.
 suppress_plotly_event_warnings <- function(expr) {
-    withCallingHandlers(
-        expr,
-        warning = function(w) {
-            if (grepl("event tied a source ID.*is not registered", conditionMessage(w))) {
-                invokeRestart("muffleWarning")
-            }
-        }
-    )
+  withCallingHandlers(
+    expr,
+    warning = function(w) {
+      if (grepl("event tied a source ID.*is not registered", conditionMessage(w))) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
 }
 
 
 # add near the top of the test file, or in helper-*.R
 quiet_plotly_test <- function(expr) {
-    withCallingHandlers(
-        suppressMessages(force(expr)),
-        warning = function(w) {
-            msg <- conditionMessage(w)
-            if (grepl("is not registered", msg) ||
-                grepl("event_register", msg) ||
-                grepl("No trace type specified", msg, ignore.case = TRUE) ||
-                grepl("no positional attributes specified", msg, ignore.case = TRUE) ||
-                grepl("don't have these attributes", msg, ignore.case = TRUE)) {
-                invokeRestart("muffleWarning")
-            }
-        }
-    )
+  withCallingHandlers(
+    suppressMessages(force(expr)),
+    warning = function(w) {
+      msg <- conditionMessage(w)
+      if (grepl("is not registered", msg) ||
+        grepl("event_register", msg) ||
+        grepl("No trace type specified", msg, ignore.case = TRUE) ||
+        grepl("no positional attributes specified", msg, ignore.case = TRUE) ||
+        grepl("don't have these attributes", msg, ignore.case = TRUE)) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
 }

@@ -22,29 +22,29 @@
 #'
 #' @keywords internal
 .buildDimRedReactives <- function(input, metaD, sce, somCodesName) {
-    tsne <- shiny::reactive({
-        tsneFunc(input$dimRedSelection, input$perplexity, sce, somCodesName)
-    }) %>%
-        shiny::bindCache(input$dimRedSelection, input$perplexity) %>%
-        shiny::debounce(1000)
+  tsne <- shiny::reactive({
+    tsneFunc(input$dimRedSelection, input$perplexity, sce, somCodesName)
+  }) %>%
+    shiny::bindCache(input$dimRedSelection, input$perplexity) %>%
+    shiny::debounce(1000)
 
-    umap <- shiny::reactive({
-        cols <- input$dimRedSelection
-        pumap <- umap::umap.defaults
-        pumap$n_neighbors <- input$n_neighbors
-        umap::umap(metaD[[somCodesName]][, cols, drop = FALSE], config = pumap)
-    }) %>%
-        shiny::bindCache(input$dimRedSelection, input$n_neighbors) %>%
-        shiny::debounce(1000)
+  umap <- shiny::reactive({
+    cols <- input$dimRedSelection
+    pumap <- umap::umap.defaults
+    pumap$n_neighbors <- input$n_neighbors
+    umap::umap(metaD[[somCodesName]][, cols, drop = FALSE], config = pumap)
+  }) %>%
+    shiny::bindCache(input$dimRedSelection, input$n_neighbors) %>%
+    shiny::debounce(1000)
 
-    pca <- shiny::reactive({
-        cols <- input$dimRedSelection
-        stats::prcomp(t(metaD[[somCodesName]][, cols, drop = FALSE]), scale = FALSE, rank. = 2)
-    }) %>%
-        shiny::bindCache(input$dimRedSelection) %>%
-        shiny::debounce(1000)
+  pca <- shiny::reactive({
+    cols <- input$dimRedSelection
+    stats::prcomp(t(metaD[[somCodesName]][, cols, drop = FALSE]), scale = FALSE, rank. = 2)
+  }) %>%
+    shiny::bindCache(input$dimRedSelection) %>%
+    shiny::debounce(1000)
 
-    list(tsne = tsne, umap = umap, pca = pca)
+  list(tsne = tsne, umap = umap, pca = pca)
 }
 
 
@@ -64,21 +64,27 @@
 #'
 #' @keywords internal
 .buildSelectionObserver <- function(sourceId, input, rsUsed, rsUsed_d, inputSelect, verbose) {
-    message("buildSelectionObserver: registering observer for source = ", sourceId)
-    shiny::observeEvent(
-        suppressWarnings(
-            .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
-        ),
-        {
-            message("observeEvent handler body ENTERED")
-            d <- .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
-            if (is.null(d)) { message("d is NULL, returning"); return(NULL) }
-            rs <- shiny::isolate(rsUsed_d())
-            if (is.null(rs)) { message("rs is NULL, returning"); return(NULL) }
-            d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
-            shiny::isolate(rsUsed(d))
-        }
-    )
+  message("buildSelectionObserver: registering observer for source = ", sourceId)
+  shiny::observeEvent(
+    suppressWarnings(
+      .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
+    ),
+    {
+      message("observeEvent handler body ENTERED")
+      d <- .safeEventData(verbose = verbose, "plotly_selected", source = sourceId)
+      if (is.null(d)) {
+        message("d is NULL, returning")
+        return(NULL)
+      }
+      rs <- shiny::isolate(rsUsed_d())
+      if (is.null(rs)) {
+        message("rs is NULL, returning")
+        return(NULL)
+      }
+      d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
+      shiny::isolate(rsUsed(d))
+    }
+  )
 }
 
 #' Build SOM Data Selection Observers
@@ -96,23 +102,25 @@
 #' @keywords internal
 .buildSOMDataObservers <- function(nPlots, input, output, rsUsed, rsUsed_d, activePlot,
                                    inputSelect, verbose) {
-    lapply(seq_len(nPlots), function(i) {
-        shiny::observeEvent(
-            suppressWarnings(
-                .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i))
-            ),
-            {
-                if (isTRUE(verbose)) message("som", i, " touched")
-                activePlot(i)
-                rs <- shiny::isolate(rsUsed_d())
-                shiny::req(rs)
-                d <- .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i))
-                if (is.null(d)) return(NULL)
-                d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
-                shiny::isolate(rsUsed(d))
-            }
-        )
-    })
+  lapply(seq_len(nPlots), function(i) {
+    shiny::observeEvent(
+      suppressWarnings(
+        .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i))
+      ),
+      {
+        if (isTRUE(verbose)) message("som", i, " touched")
+        activePlot(i)
+        rs <- shiny::isolate(rsUsed_d())
+        shiny::req(rs)
+        d <- .safeEventData(verbose = verbose, "plotly_selected", source = paste0("somData", i))
+        if (is.null(d)) {
+          return(NULL)
+        }
+        d <- inputSelect(d, rs, shiny::isolate(input$selectMode))
+        shiny::isolate(rsUsed(d))
+      }
+    )
+  })
 }
 
 #' Build Zoom Observers for SOM Data Plots
@@ -126,14 +134,16 @@
 #'
 #' @keywords internal
 .buildZoomObservers <- function(nPlots, input, zoomFunc, verbose) {
-    lapply(seq_len(nPlots), function(plotIdx) {
-        shiny::observe({
-            zoom <- .safeEventData(
-                verbose = verbose, "plotly_relayout",
-                source = paste0("somData", plotIdx)
-            )
-            if (is.null(zoom)) return(NULL)
-            zoomFunc(zoom, plotIdx)
-        })
+  lapply(seq_len(nPlots), function(plotIdx) {
+    shiny::observe({
+      zoom <- .safeEventData(
+        verbose = verbose, "plotly_relayout",
+        source = paste0("somData", plotIdx)
+      )
+      if (is.null(zoom)) {
+        return(NULL)
+      }
+      zoomFunc(zoom, plotIdx)
     })
+  })
 }
