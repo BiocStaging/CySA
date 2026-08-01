@@ -201,6 +201,156 @@ test_that("ttestResult reports 'no data' when groupsVar is 'none'", {
   }))
 })
 
+test_that("outputs: ttestResult runs a real t-test when a valid grouping is set", {
+    set.seed(42)
+
+    n_markers   <- 6
+    n_som_nodes <- 10
+    n_samples   <- 4
+    n_cells     <- 60  # per sample
+
+    marker_names <- paste0("marker", seq_len(n_markers))
+    sample_ids   <- paste0("S", seq_len(n_samples))
+    conditions   <- factor(
+        c("control", "control", "treated", "treated"),
+        levels = c("control", "treated")
+    )
+
+    experiment_info <- data.frame(
+        sample_id   = sample_ids,
+        treatment   = conditions,
+        total_cells = rep(1000L, n_samples),
+        stringsAsFactors = FALSE
+    )
+
+    som_codes <- matrix(
+        runif(n_som_nodes * n_markers),
+        nrow = n_som_nodes, ncol = n_markers,
+        dimnames = list(paste0("node", seq_len(n_som_nodes)), marker_names)
+    )
+
+    # Control samples draw mostly from nodes 1-5; treated mostly from 6-10,
+    # with independent random draws per sample so per-sample counts differ.
+    assign_clusters <- function(is_control, n) {
+        pool <- if (is_control) 1:5 else 6:10
+        c(
+            base::sample(pool, round(n * 0.7), replace = TRUE),
+            base::sample(seq_len(n_som_nodes), n - round(n * 0.7), replace = TRUE)
+        )
+    }
+
+    coldata_list <- base::mapply(function(sid, cond) {
+        data.frame(
+            sample_id  = sid,
+            cluster_id = assign_clusters(cond == "control", n_cells),
+            stringsAsFactors = FALSE
+        )
+    }, sample_ids, as.character(conditions), SIMPLIFY = FALSE)
+    coldata_df <- do.call(rbind, coldata_list)
+    n_total <- nrow(coldata_df)
+
+    exprs_mat <- matrix(
+        runif(n_markers * n_total),
+        nrow = n_markers,
+        dimnames = list(marker_names, paste0("cell", seq_len(n_total)))
+    )
+    node_counts <- tabulate(coldata_df$cluster_id, nbins = n_som_nodes)
+
+    som_stats <- data.frame(
+        id     = seq_len(n_som_nodes),
+        n      = node_counts,
+        mean   = seq_len(n_som_nodes) / n_som_nodes,
+        median = seq_len(n_som_nodes) / n_som_nodes,
+        rdQu   = seq_len(n_som_nodes) / n_som_nodes,
+        max    = seq_len(n_som_nodes) / n_som_nodes,
+        stringsAsFactors = FALSE
+    )
+    sce <- SingleCellExperiment::SingleCellExperiment(
+        assays = list(exprs = exprs_mat),
+        colData = S4Vectors::DataFrame(
+            sample_id  = coldata_df$sample_id,
+            cluster_id = factor(coldata_df$cluster_id, levels = seq_len(n_som_nodes))
+        ),
+        metadata = list(
+            SOM_codes       = som_codes,
+            SOM_stats       = som_stats,
+            map             = list(colsUsed = marker_names),
+            experiment_info = experiment_info
+        )
+    )
+    rownames(sce) <- marker_names
+
+    clusterPatientTable <- table(
+        sample_id  = sce$sample_id,
+        cluster_id = sce$cluster_id
+    )
+
+    dList <- list(
+        d1 = c("marker1", "marker2"),
+        d2 = c("marker3", "marker4"),
+        d3 = c("marker5", "marker6"),
+        d4 = c("marker1", "marker3"),
+        d5 = c("marker2", "marker5"),
+        d6 = c("marker4", "marker6")
+    )
+
+    prepped <- prepClusterSelectorData(
+        sce,
+        dList = dList,
+        total_cells_to_sample = 200
+    )
+    dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes)))
+    dendTable <- data.frame(
+        id = seq_len(n_som_nodes),
+        label = rownames(som_codes),
+        stringsAsFactors = FALSE
+    )
+    somRasterData <- data.frame(
+        x  = rep(seq_len(5), length.out = n_som_nodes),
+        y  = rep(seq_len(2), each = ceiling(n_som_nodes / 2)),
+        id = seq_len(n_som_nodes)
+    )
+    for (m in marker_names) {
+        somRasterData[[m]] <- som_codes[, m]
+    }
+    app <- clusterSelector(
+        sce                 = prepped$sce,
+        sce_subsampled      = prepped$sce_subsampled,
+        dList               = prepped$dList,
+        dend                = dend,
+        dendTable           = dendTable,
+        clusterPatientTable = clusterPatientTable,
+        somRasterData       = somRasterData,
+        somRasterObj        = NULL
+    )
+
+    shiny::testServer(
+        app = app,
+        expr = {
+            suppressWarnings(session$setInputs(clusterNumbers = "1,2,3,4,5"))
+            session$elapse(1000)
+            suppressWarnings(session$flushReact())
+
+            suppressWarnings(session$setInputs(
+                groupsVar  = "treatment",
+                group1     = "control",
+                group2     = "treated",
+                relativeTo = "none"
+            ))
+            session$elapse(1000)
+            suppressWarnings(session$flushReact())
+
+            result <- paste(output$ttestResult, collapse = "\n")
+
+            expect_false(grepl("no data", result, fixed = TRUE))
+            expect_false(grepl("not enough data", result, fixed = TRUE))
+            expect_true(grepl("p-value", result, fixed = TRUE))
+            expect_true(grepl("t = ", result, fixed = TRUE))
+        }
+    )
+})
+
+
 test_that("drawProjection produces non-empty traces for a real selection", {
   fx <- make_test_app()
   sce <- fx$sce

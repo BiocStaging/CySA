@@ -421,7 +421,7 @@ Bioconductor workflows:
   [edgeR](https://bioconductor.org/packages/edgeR), or
   [limma](https://bioconductor.org/packages/limma).
 * **SingleCellSignalR / scDiffCom** — once populations are fixed, the same
-  sample-level metadata can be reused for cell-cell communication or
+  sample-level metadata can be reused for cell-cell communication or.
   trajectory-oriented analyses.
 
 The interactive step performed by CySA is therefore not a replacement for these

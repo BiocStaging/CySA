@@ -544,61 +544,60 @@
   })
 
   output$ttestResult <- shiny::renderPrint({
-    empty <- FALSE
-    groupsVar <- input$groupsVar
-    if (is.null(groupsVar) || length(groupsVar) == 0 ||
-      !groupsVar %in% colnames(metaD$experiment_info)) {
-      empty <- TRUE
-    }
-    grpInp <- groupsInput()
-    if (purrr::is_empty(grpInp)) empty <- TRUE
-    if (any(unlist(lapply(grpInp, purrr::is_empty)))) empty <- TRUE
-    rs <- rsUsed()
-    shiny::req(rs)
-    relativeToCol <- input$relativeTo
-    numCols <- unlist(lapply(metaD$experiment_info, is.numeric), use.names = FALSE)
-    expInfo <- metaD$experiment_info[, numCols, drop = FALSE]
-    eI <- apply(expInfo, 2, as.numeric) %>% as.data.frame()
-    rownames(eI) <- metaD$experiment_info$sample_id
-    outputList <- rv$outputList
-
-    if (length(rs) < 1) empty <- TRUE
-    if (empty) {
-      return("no data")
-    }
-    if (relativeToCol == "none") {
-      rSums <- rep(1, nrow(clusterPatientTable))
-    } else {
-      rSums <- .computeRelativeCounts(
-        clusterPatientTable, rs, relativeToCol, eI, outputList
-      ) / 100
-      rSums <- rSums[rownames(clusterPatientTable)]
-    }
-    names(rSums) <- rownames(clusterPatientTable)
-    cD <- SingleCellExperiment::colData(sce)
-    cD <- cD[cD$cluster_id %in% rs, ]
-    cellCounts <- cD %>%
-      dplyr::as_tibble() %>%
-      dplyr::group_by(.data$sample_id) %>%
-      dplyr::count()
-    x <- cellCounts %>%
-      dplyr::filter(.data$sample_id %in% grpInp$group1) %>%
-      dplyr::ungroup()
-    x$rsums <- rSums[x$sample_id]
-    x$val <- x$n / x$rsums
-    x <- x$val
-    y <- cellCounts %>%
-      dplyr::filter(.data$sample_id %in% grpInp$group2) %>%
-      dplyr::ungroup()
-    y$rsums <- rSums[y$sample_id]
-    y$val <- y$n / y$rsums
-    y <- y$val
-    shiny::req(x)
-    shiny::req(y)
-    if (stats::sd(x) == 0 && stats::sd(y) == 0) {
-      return("not enough data")
-    }
-    stats::t.test(x, y)
+      empty <- FALSE
+      groupsVar <- input$groupsVar
+      if (is.null(groupsVar) || length(groupsVar) == 0 ||
+          !groupsVar %in% colnames(metaD$experiment_info)) {
+          empty <- TRUE
+      }
+      grpInp <- groupsInput()
+      if (purrr::is_empty(grpInp)) empty <- TRUE
+      if (any(unlist(lapply(grpInp, purrr::is_empty)))) empty <- TRUE
+      rs <- rsUsed()
+      shiny::req(rs)
+      relativeToCol <- input$relativeTo
+      outputList <- rv$outputList
+      if (length(rs) < 1) empty <- TRUE
+      if (empty) {
+          return("no data")
+      }
+      if (relativeToCol == "none") {
+          rSums <- rep(1, nrow(clusterPatientTable))
+      } else {
+          numCols <- unlist(lapply(metaD$experiment_info, is.numeric), use.names = FALSE)
+          expInfo <- metaD$experiment_info[, numCols, drop = FALSE]
+          eI <- apply(expInfo, 2, as.numeric) %>% as.data.frame()
+          rownames(eI) <- metaD$experiment_info$sample_id
+          rSums <- .computeRelativeCounts(
+              clusterPatientTable, rs, relativeToCol, eI, outputList
+          ) / 100
+          rSums <- rSums[rownames(clusterPatientTable)]
+      }
+      names(rSums) <- rownames(clusterPatientTable)
+      cD <- SingleCellExperiment::colData(sce)
+      cD <- cD[cD$cluster_id %in% rs, ]
+      cellCounts <- cD %>%
+          dplyr::as_tibble() %>%
+          dplyr::group_by(.data$sample_id) %>%
+          dplyr::count()
+      x <- cellCounts %>%
+          dplyr::filter(.data$sample_id %in% grpInp$group1) %>%
+          dplyr::ungroup()
+      x$rsums <- rSums[x$sample_id]
+      x$val <- x$n / x$rsums
+      x <- x$val
+      y <- cellCounts %>%
+          dplyr::filter(.data$sample_id %in% grpInp$group2) %>%
+          dplyr::ungroup()
+      y$rsums <- rSums[y$sample_id]
+      y$val <- y$n / y$rsums
+      y <- y$val
+      shiny::req(x)
+      shiny::req(y)
+      if (stats::sd(x) == 0 && stats::sd(y) == 0) {
+          return("not enough data")
+      }
+      stats::t.test(x, y)
   })
 
   # SOM raster outputs.
