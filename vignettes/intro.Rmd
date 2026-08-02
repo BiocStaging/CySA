@@ -27,21 +27,13 @@ knitr::opts_chunk$set(
 
 # Overview
 
-**CySA** provides an interactive Shiny application for selecting and
-visualizing clusters from flow-cytometry data stored in
-`SingleCellExperiment` objects. It is designed to work with SOM-based
-clustering outputs such as those produced by
-[FlowSOM](https://bioconductor.org/packages/FlowSOM) and curated by the
-[CATALYST](https://bioconductor.org/packages/CATALYST) workflow.
+**CySA** provides an interactive Shiny application for selecting and visualizing clusters from flow-cytometry data stored in `SingleCellExperiment` objects. It is designed to work with SOM-based clustering outputs such as those produced by [FlowSOM](https://bioconductor.org/packages/FlowSOM) and curated by the [CATALYST](https://bioconductor.org/packages/CATALYST) workflow.
 
 The main functions are:
 
-* `prepClusterSelectorData()` -- subsample a `SingleCellExperiment` and build
-the inputs required by the app.
-* `clusterSelector()` -- return a Shiny app object that can be launched with
-`shiny::runApp()`.
-* `plotSOMScatter()` and `plotCytoScatter()` -- static ggplot2 helpers for SOM
-and scatter visualizations.
+- `prepClusterSelectorData()` -- subsample a `SingleCellExperiment` and build the inputs required by the app.
+- `clusterSelector()` -- return a Shiny app object that can be launched with `shiny::runApp()`.
+- `plotSOMScatter()` and `plotCytoScatter()` -- static ggplot2 helpers for SOM and scatter visualizations.
 
 # Installation
 
@@ -56,17 +48,13 @@ BiocManager::install("CySA")
 
 # Quick start
 
-`CySA` expects a `SingleCellExperiment` object that contains at least the
-following items in `metadata(sce)`:
+`CySA` expects a `SingleCellExperiment` object that contains at least the following items in `metadata(sce)`:
 
-* `SOM_codes` -- a matrix of SOM node codes (one row per SOM node, one column
-per marker).
-* `SOM_stats` -- a data frame of per-node statistics with an `id` column.
-* `map$colsUsed` -- an optional character vector of markers used for SOM
-mapping.
+- `SOM_codes` -- a matrix of SOM node codes (one row per SOM node, one column per marker).
+- `SOM_stats` -- a data frame of per-node statistics with an `id` column.
+- `map$colsUsed` -- an optional character vector of markers used for SOM mapping.
 
-The object should also contain a `sample_id` column and a `cluster_id` column
-in `colData(sce)`.
+The object should also contain a `sample_id` column and a `cluster_id` column in `colData(sce)`.
 
 This vignette uses a small example data set shipped with the package:
 
@@ -76,8 +64,7 @@ sce <- CySA_example_sce()
 head(S4Vectors::metadata(sce)$SOM_codes)
 ```
 
-Use `prepClusterSelectorData()` to subsample the data and generate a default
-list of marker pairs:
+Use `prepClusterSelectorData()` to subsample the data and generate a default list of marker pairs:
 
 ```{r prep-data}
 prepped <- prepClusterSelectorData(
@@ -88,8 +75,7 @@ prepped <- prepClusterSelectorData(
 names(prepped)
 ```
 
-`clusterSelector()` needs a few additional inputs. Here we build minimal
-versions from the example data:
+`clusterSelector()` needs a few additional inputs. Here we build minimal versions from the example data:
 
 ```{r build-inputs}
 som_codes <- S4Vectors::metadata(sce)$SOM_codes
@@ -148,8 +134,7 @@ if (interactive()) {
 }
 ```
 
-Once launched, the app lets you select cells or SOM clusters from a 2D
-scatter plot or an interactive dendrogram:
+Once launched, the app lets you select cells or SOM clusters from a 2D scatter plot or an interactive dendrogram:
 
 ```{r fig-gating, echo = FALSE, out.width = "49%", fig.show = "hold"}
 knitr::include_graphics(c(
@@ -158,9 +143,7 @@ knitr::include_graphics(c(
 ))
 ```
 
-SOM nodes can also be explored directly, or via t-SNE/UMAP/PCA projections
-of the SOM code vectors, with the current selection highlighted
-consistently across all views:
+SOM nodes can also be explored directly, or via t-SNE/UMAP/PCA projections of the SOM code vectors, with the current selection highlighted consistently across all views:
 
 ```{r fig-dimred, echo = FALSE, out.width = "49%", fig.show = "hold"}
 knitr::include_graphics(c(
@@ -169,36 +152,281 @@ knitr::include_graphics(c(
 ))
 ```
 
-The interactive session writes the selected cluster groupings back to the
-`outputList` object that was passed in.
+The interactive session writes the selected cluster groupings back to the `outputList` object that was passed in.
 
+# FlowSOM preprocessing workflow
 
+CySA is designed to work with SOM-based clustering outputs, such as those produced by the [FlowSOM](https://bioconductor.org/packages/FlowSOM) package. This section walks through a complete preprocessing workflow: from raw FCS data to a `SingleCellExperiment` object ready for use with CySA.
 
+## Data preprocessing
+
+FlowSOM handles different inputs, such as a `flowFrame`, a `flowSet`, or an array of file paths. For this example we use a `flowFrame`, which allows easier preprocessing. We start by compensating the data and then transforming it with the logicle function. For CyTOF data, an arcsinh transformation is preferred, which is also available in the `flowCore` package. Besides compensation and transformation, we also recommend cleaning the data by removing margin events and by using cleaning algorithms.
+
+```{r flowsom-prep, eval = FALSE}
+library(flowCore)
+library(flowWorkspace)
+library(FlowSOM)
+
+# Load example FCS file (shipped with FlowSOM)
+fileName <- system.file("extdata", "68983.fcs", package = "FlowSOM")
+ff <- read.FCS(fileName)
+
+# Compensation (for flow cytometry data)
+comp <- keyword(ff)[["SPILL"]]
+ff <- compensate(ff, comp)
+
+# Transformation
+# For flow cytometry: logicle transformation
+transformList <- estimateLogicle(ff, channels = colnames(comp))
+ff <- transform(ff, transformList)
+
+# For CyTOF data, use arcsinh transformation instead:
+# ff <- transform(ff, arcsinhTransform())
+```
+
+## Running FlowSOM
+
+The easiest way to use FlowSOM is via the wrapper function `FlowSOM()`. It has fewer options than using the separate functions, but is generally powerful enough for most use cases. It returns a list where the first item is the FlowSOM object (as required by many functions in this package) and the second item is the result of the metaclustering.
+
+```{r flowsom-run, eval = FALSE}
+set.seed(42)
+
+# Run FlowSOM on the preprocessed flowFrame
+fSOM <- FlowSOM(ff,
+  # Input options:
+  compensate = FALSE,    # already compensated above
+  transform = FALSE,     # already transformed above
+  scale = FALSE,
+  # SOM options:
+  colsToUse = c(9, 12, 14:18),  # select relevant channels
+  xdim = 7, ydim = 7,           # 7x7 SOM grid = 49 nodes
+  # Metaclustering options:
+  nClus = 10                    # number of metaclusters
+)
+
+```
+
+The resulting object provides cluster and metacluster labels for every individual cell:
+
+```{r flowsom-clusters, eval = FALSE}
+head(GetClusters(fSOM))      # SOM node ID for each cell
+head(GetMetaclusters(fSOM))  # Metacluster ID for each cell
+```
+
+## Preparing FlowSOM output for CySA
+
+To use FlowSOM results with CySA, you need to convert them into a
+`SingleCellExperiment` object with the required metadata structure.
+
+**Important:** The following code includes several critical steps that are easy to get wrong. Common pitfalls and their solutions are noted in comments.
+
+```{r flowsom-to-sce, eval = FALSE}
+library(SingleCellExperiment)
+library(S4Vectors)
+
+# Extract SOM codes (one row per SOM node, one column per marker)
+som_codes <- fSOM$map$codes
+markers <- fSOM$map$colsUsed  # Get the marker names used in the SOM
+
+# Extract cell-level assignments
+cell_clusters <- GetClusters(fSOM)
+cell_metaclusters <- GetMetaclusters(fSOM)
+
+# Build colData from the flowFrame
+# CRITICAL: cluster_id must be a factor with levels for ALL SOM nodes (1 to nrow(som_codes)),
+# even if some nodes are empty. Otherwise, prepClusterSelectorData() will fail when it
+# tries to set levels based on nrow(SOM_codes), and plot interactions will break because
+# node IDs won't map correctly.
+coldata <- data.frame(
+  sample_id = rep("sample1", nrow(ff@exprs)),
+  cluster_id = factor(cell_clusters, levels = seq_len(nrow(som_codes))),
+  metacluster_id = factor(cell_metaclusters)
+)
+
+# Create the expression matrix with ONLY the markers used in the SOM
+# CRITICAL: The rownames of the expression matrix MUST match the column names of som_codes.
+# A common mistake is to use all flowFrame channels (colnames(ff)), which includes FSC, SSC,
+# Time, and other parameters not used in the SOM. When CySA's plotSOMScatter() tries to
+# index som_codes with marker names that don't exist, you get errors like:
+#   "subscript out of bounds" or "dim(X) must have a positive length"
+# The fix: subset to only the markers that were actually used in the FlowSOM analysis.
+exprs_mat <- t(ff@exprs[, markers, drop = FALSE])
+rownames(exprs_mat) <- markers
+
+# Compute SOM_stats (required by CySA)
+# CRITICAL: SOM_stats must have one row per SOM node, with an 'id' column.
+# A common mistake is to compute statistics per marker instead of per node.
+# The 'id' values must be 1:nrow(som_codes) to match the SOM node indices.
+som_stats <- data.frame(
+  id = seq_len(nrow(som_codes)),
+  n = tabulate(cell_clusters, nbins = nrow(som_codes)),
+  mean = som_codes[, 1],  # Use first marker code as proxy for visualization
+  median = som_codes[, 1],
+  rdQu = som_codes[, 1],
+  max = som_codes[, 1],
+  stringsAsFactors = FALSE
+)
+rownames(som_stats) <- rownames(som_codes)
+
+# Create the SingleCellExperiment object
+# CRITICAL: experiment_info must contain at least one NUMERIC column (besides sample_id).
+# The Stats panel tries to select numeric columns from experiment_info to offer as
+# normalization options. If there are no numeric columns, apply() fails with:
+#   "dim(X) must have a positive length"
+# The fix: include at least one numeric column like total_cells or sample_nr.
+experiment_info <- data.frame(
+  sample_id = unique(coldata$sample_id),
+  total_cells = nrow(ff@exprs),  # numeric column required by stats panel
+  stringsAsFactors = FALSE
+)
+
+sce <- SingleCellExperiment(
+  assays = list(exprs = exprs_mat),
+  colData = DataFrame(coldata),
+  metadata = list(
+    SOM_codes = som_codes,
+    SOM_stats = som_stats,
+    map = list(colsUsed = markers),
+    experiment_info = experiment_info
+  )
+)
+
+# Now pass to CySA
+# CRITICAL: prepClusterSelectorData() requires at least 12 markers to build the default
+# dList (marker pairs for 2D plots). FlowSOM often uses fewer markers (e.g., 7 in this
+# example). If you get the error:
+#   "sce must have at least 12 row names to build default dList"
+# The fix: provide a custom dList with explicit marker pairs.
+dList <- list(
+  d1 = c(markers[1], markers[2]),
+  d2 = c(markers[3], markers[4]),
+  d3 = c(markers[5], markers[6]),
+  d4 = c(markers[1], markers[3]),
+  d5 = c(markers[2], markers[4]),
+  d6 = c(markers[5], markers[7])
+)
+prepped <- prepClusterSelectorData(
+  sce,
+  total_cells_to_sample = 500,
+  dList = dList
+)
+```
+
+## Building CySA inputs from FlowSOM output
+
+To launch the CySA app with FlowSOM data, you need to build several additional
+inputs from the FlowSOM object. These are required arguments for `clusterSelector()`.
+
+**Important:** Each of these inputs serves a specific purpose in the CySA app.
+Common errors and their solutions are noted below.
+
+```{r flowsom-app, eval = FALSE}
+# Extract SOM codes and build dendrogram
+som_codes <- fSOM$map$codes
+
+# CRITICAL: FlowSOM may not set rownames on the codes matrix.
+# Without rownames, the dendTable will have mismatched row counts, causing:
+#   "arguments imply differing number of rows"
+# The fix: assign node IDs as rownames if they're missing.
+if (is.null(rownames(som_codes))) {
+  rownames(som_codes) <- seq_len(nrow(som_codes))
+}
+
+# Build hierarchical clustering dendrogram from SOM codes
+# This is used for the dendrogram view in CySA
+dend <- stats::as.dendrogram(stats::hclust(stats::dist(som_codes)))
+
+# Build the dendrogram navigation table
+# CRITICAL: The 'id' column must match the SOM node indices (1:nrow(som_codes))
+# and 'label' must match the rownames of som_codes.
+dendTable <- data.frame(
+  id = seq_len(nrow(som_codes)),
+  label = rownames(som_codes),
+  stringsAsFactors = FALSE
+)
+
+# Build cluster-by-sample table (SOM nodes x samples)
+# This is used for abundance comparisons across samples
+clusterPatientTable <- table(
+  sample_id = sce$sample_id,
+  cluster_id = sce$cluster_id
+)
+
+# Build SOM raster data for heatmap visualization
+# CRITICAL: The SOM grid layout must match the FlowSOM dimensions.
+# FlowSOM uses a rectangular grid (xdim × ydim). The raster data frame
+# must have columns: x, y, id, and one column per marker with the SOM codes.
+# A common mistake is to use the wrong grid dimensions, which causes:
+#   "subscript out of bounds" or misaligned heatmaps
+xdim <- fSOM$map$xdim
+ydim <- fSOM$map$ydim
+
+# Create grid coordinates for each SOM node
+# Nodes are arranged row-by-row in the FlowSOM grid
+somRasterData <- data.frame(
+  x = rep(seq_len(xdim), length.out = nrow(som_codes)),
+  y = rep(seq_len(ydim), each = ceiling(nrow(som_codes) / ydim))[seq_len(nrow(som_codes))],
+  id = seq_len(nrow(som_codes))
+)
+
+# Add marker expression values for each SOM node
+# These are used to color the SOM heatmap tiles
+for (m in colnames(som_codes)) {
+  somRasterData[[m]] <- som_codes[, m]
+}
+
+# Create the CySA app
+# CRITICAL: All arguments must be provided (no NULLs allowed for required inputs).
+# The most common errors at this stage are:
+#   - Missing experiment_info numeric column → "dim(X) must have a positive length"
+#   - Mismatched marker names between exprs and som_codes → "subscript out of bounds"
+#   - cluster_id factor missing levels → "undefined factor levels"
+app <- clusterSelector(
+  sce = prepped$sce,
+  sce_subsampled = prepped$sce_subsampled,
+  dList = prepped$dList,
+  dend = dend,
+  dendTable = dendTable,
+  clusterPatientTable = clusterPatientTable,
+  somRasterData = somRasterData,
+  somRasterObj = NULL  # not needed when somRasterData is provided
+)
+
+# Launch interactively
+if (interactive()) {
+  shiny::runApp(app)
+}
+```
+
+### Troubleshooting Summary
+
+If you encounter errors when running the FlowSOM → CySA workflow, check:
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `dim(X) must have a positive length` | `experiment_info` has no numeric columns | Add a numeric column like `total_cells` |
+| `sce must have at least 12 row names` | Fewer than 12 markers for default `dList` | Provide custom `dList` with marker pairs |
+| `subscript out of bounds` | Marker names in `exprs_mat` don't match `som_codes` columns | Subset `exprs_mat` to only SOM markers |
+| `arguments imply differing number of rows` | `dendTable` rownames don't match `som_codes` | Ensure `rownames(som_codes)` is set |
+| `undefined factor levels` | `cluster_id` factor missing node levels | Set `levels = seq_len(nrow(som_codes))` |
 
 # Statistical comparison
 
-CySA can compare the relative abundance of selected SOM nodes between two
-sample groups. To use this feature, `metadata(sce)$experiment_info` must
-contain a grouping column (for example `condition`) and a `sample_id` column
-that matches `colData(sce)$sample_id`.
+CySA can compare the relative abundance of selected SOM nodes between two sample groups. To use this feature, `metadata(sce)$experiment_info` must contain a grouping column (for example `condition`) and a `sample_id` column that matches `colData(sce)$sample_id`.
 
 In the app, select:
 
-* **groupsVar** -- the column in `experiment_info` that defines the groups.
-* **group1** and **group2** -- the two groups to compare.
-* **relativeTo** -- whether to report raw counts, normalize by a numeric column
-in `experiment_info`, or normalize by another cluster group.
+- **groupsVar** -- the column in `experiment_info` that defines the groups.
+- **group1** and **group2** -- the two groups to compare.
+- **relativeTo** -- whether to report raw counts, normalize by a numeric column in `experiment_info`, or normalize by another cluster group.
 
-The Stats panel shows per-sample counts and percentages for the current
-selection, along with the t-test result:
+The Stats panel shows per-sample counts and percentages for the current selection, along with the t-test result:
 
 ```{r fig-stats, echo = FALSE, out.width = "100%"}
 knitr::include_graphics("../man/figures/README-stats-panel.png")
 ```
 
-For each selected SOM node, CySA performs a two-sample t-test on the
-relative cell counts between the two groups and displays the result in the
-Stats panel.
+For each selected SOM node, CySA performs a two-sample t-test on the relative cell counts between the two groups and displays the result in the Stats panel.
 
 ```{r example with stats}
 library(CySA)
@@ -361,17 +589,9 @@ app <- clusterSelector(
 
 Launch the app interactively:
 
-How to exercise each statistical feature in the running app
-Feature	What to do
-Cell counts	Select nodes 1–20 in a SOM plot; Stats tab shows counts per sample
-T-test	Set groupsVar = condition, group1 = control, group2 = treated, relativeTo = none; select nodes 1–20; p-value should be large (control-enriched nodes)
-T-test (significant)	Same setup but select nodes 31–50 (treated-enriched); expect small p-value
-Normalize by total cells	Set relativeTo = total_cells; counts divided by cytometer total
-Normalize by another group	Name nodes 31–50 "activated", then set relativeTo = activated for a different selection
-UpSet / violin	Name both "resting" (1–20) and "activated" (31–50); UpSet shows overlap, violin shows marker separation
+How to exercise each statistical feature in the running app Feature What to do Cell counts Select nodes 1–20 in a SOM plot; Stats tab shows counts per sample T-test Set groupsVar = condition, group1 = control, group2 = treated, relativeTo = none; select nodes 1–20; p-value should be large (control-enriched nodes) T-test (significant) Same setup but select nodes 31–50 (treated-enriched); expect small p-value Normalize by total cells Set relativeTo = total_cells; counts divided by cytometer total Normalize by another group Name nodes 31–50 "activated", then set relativeTo = activated for a different selection UpSet / violin Name both "resting" (1–20) and "activated" (31–50); UpSet shows overlap, violin shows marker separation
 
-For a closer look at the phenotype of a selection, the app also provides
-per-node marker pie charts, all marker-pair views, and SOM heatmaps:
+For a closer look at the phenotype of a selection, the app also provides per-node marker pie charts, all marker-pair views, and SOM heatmaps:
 
 ```{r fig-phenotype, echo = FALSE, out.width = "100%"}
 knitr::include_graphics(c(
@@ -389,8 +609,7 @@ if (interactive()) {
 
 # Static plots
 
-For non-interactive use, `plotSOMScatter()` produces a ggplot2 scatter plot of
-two SOM channels:
+For non-interactive use, `plotSOMScatter()` produces a ggplot2 scatter plot of two SOM channels:
 
 ```{r som-scatter}
 plotSOMScatter(sce, chs = c("marker1", "marker2"))
@@ -404,29 +623,14 @@ plotCytoScatter(sce, chs = c("marker1", "marker2"))
 
 # Related cytometry workflows
 
-CySA is designed to sit between unsupervised clustering and downstream
-interpretation of cytometry experiments. It complements several established
-Bioconductor workflows:
+CySA is designed to sit between unsupervised clustering and downstream interpretation of cytometry experiments. It complements several established Bioconductor workflows:
 
-* **FlowSOM** — CySA consumes FlowSOM's SOM codes and optionally a FlowSOM
-  object to visualise and refine the SOM clustering interactively.
-* **CATALYST** — the expected input is a
-  `SingleCellExperiment` with `sample_id` and `cluster_id` in `colData`, a
-  convention used throughout CATALYST. Marker names and cluster codes are read
-  directly from the object.
-* **diffcyt / edgeR / limma** — after clusters have been selected and named in
-  CySA, the resulting `outputList` can be used to define cell populations for
-  differential abundance testing with packages such as
-  [diffcyt](https://bioconductor.org/packages/diffcyt),
-  [edgeR](https://bioconductor.org/packages/edgeR), or
-  [limma](https://bioconductor.org/packages/limma).
-* **SingleCellSignalR / scDiffCom** — once populations are fixed, the same
-  sample-level metadata can be reused for cell-cell communication or.
-  trajectory-oriented analyses.
+- **FlowSOM** — CySA consumes FlowSOM's SOM codes and optionally a FlowSOM object to visualise and refine the SOM clustering interactively.
+- **CATALYST** — the expected input is a `SingleCellExperiment` with `sample_id` and `cluster_id` in `colData`, a convention used throughout CATALYST. Marker names and cluster codes are read directly from the object.
+- **diffcyt / edgeR / limma** — after clusters have been selected and named in CySA, the resulting `outputList` can be used to define cell populations for differential abundance testing with packages such as [diffcyt](https://bioconductor.org/packages/diffcyt), [edgeR](https://bioconductor.org/packages/edgeR), or [limma](https://bioconductor.org/packages/limma).
+- **SingleCellSignalR / scDiffCom** — once populations are fixed, the same sample-level metadata can be reused for cell-cell communication or. trajectory-oriented analyses.
 
-The interactive step performed by CySA is therefore not a replacement for these
-workflows but a bridge: it lets a human curate SOM-derived clusters and then
-export clean population definitions for statistical downstream analysis.
+The interactive step performed by CySA is therefore not a replacement for these workflows but a bridge: it lets a human curate SOM-derived clusters and then export clean population definitions for statistical downstream analysis.
 
 # Session information
 
